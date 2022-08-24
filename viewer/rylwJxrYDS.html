@@ -2908,6 +2908,1206 @@ initVisualization(root);
 
 
 </script>
+<script type="text/javascript">
+
+
+// a function for computing some tree info that will be useful later
+function computeMaxDepths(tree, depth) {
+  tree.depth = depth;
+  tree.maxDepth = tree.depth;
+  
+  tree.numLeaves = 0;
+  if ( !tree.children ) {
+    tree.numLeaves = 1;  // count self as a leaf
+  }
+
+  for (idx in tree.children) {
+    var child = tree.children[idx];
+    computeMaxDepths(child, depth + 1);
+    if (child.maxDepth > tree.maxDepth){
+      tree.maxDepth = child.maxDepth;
+    }
+
+    tree.numLeaves += child.numLeaves;
+  }
+}
+
+
+// figure out the color based on whether the node is a leaf, satellite, or nucleus
+function computeNodeColor(d){
+  if ( !d.children ) {
+    return "#aaa";
+  } else if ( d.name.indexOf("nucleus:") == 0 ) {
+    return "#faa";
+  } else {
+    return "#fff";
+  }
+}
+
+
+// shorten the text to display (and hide nonterminal labels)
+function computeNodeText (d) {
+  if ( d.children ) {
+    return "";
+  } else if ( d.name.length < 60 ) {
+    return d.name;
+  } else {
+    return d.name.substring(0, 56) + " ...";
+  }
+}
+
+
+// this creates the tree visualization
+function initVisualization(source) {
+  
+  // Compute the new tree layout.
+  var nodes = tree.nodes(root);
+
+  // shrink depth to make room for text
+  nodes.forEach(
+    function(d){
+      d.y = d.y * (width - textBoxWidth) / width;
+    }
+  );
+
+  var node = vis.selectAll("g.node")
+      .data(nodes, function(d) { return d.id || (d.id = ++i); });
+
+  // create nodes
+  var nodeEnter = node.enter().append("svg:g")
+      .attr("class", "node")
+      .attr("transform", function(d) { return "translate(" + source.y0 + "," + source.x0 + ")"; })
+
+  // add the circle representing the nodes
+  nodeEnter.append("svg:circle")
+      .attr("r", 6)
+      .style("fill", computeNodeColor);
+
+  // add text next to nodes, if applicable
+  nodeEnter.append("svg:text")
+      .attr("x", 12)
+      .attr("dy", "0.35em")
+      .text(computeNodeText)
+      .style("visibility", function(d) { return d.children ? "hidden" : "visible";} )
+      .style("fill-opacity", 1);
+
+  // add tooltip triggers
+  nodeEnter.on("mouseover", function(d) {
+            tooltipDiv.transition()
+                .duration(100)
+                .style("opacity", 1.0);
+            tooltipDiv.text(d.name)
+                .style("left", (d3.event.pageX + 10) + "px")
+                .style("top", (d3.event.pageY) + "px");
+            })
+        .on("mouseout", function(d) {
+            tooltipDiv.transition()
+                .duration(100)
+                .style("opacity", 0.0);
+        });
+
+  // set node positions
+  node.attr("transform", function(d) { return "translate(" + d.y + "," + d.x + ")"; });
+
+  // add the links between nodes
+  var links = vis.selectAll("path.link")
+      .data(tree.links(nodes), function(d) { return d.target.id; });//TODO remove .data call?
+
+  links.enter().insert("svg:line", "g")
+      .attr("class", "link")
+      .attr("x1", function(d) { return d.source.y; })
+      .attr("y1", function(d) { return d.source.x; })
+      .attr("x2", function(d) { return d.target.y; })
+      .attr("y2", function(d) { return d.target.x; });
+}
+
+
+// create a div element for tooltips
+var tooltipDiv = d3.select("body").append("div")   
+    .attr("class", "tooltip")               
+    .style("opacity", 0);
+
+// get the tree JSON through jinja2
+var root = {'name': 'ROOT', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'This paper presents a method for unsupervised representation learning of speech .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:temporal', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'The idea is to first learn discrete representation'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( vector quantization is done by Gumbel softmax or k-means )'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'from audio samples with contrastive prediction coding type objective ,'}]}]}, {'name': 'nucleus:temporal', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'and then perform BERT-style pre-training'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( borrowed from NLP ) .'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'The BERT features are used as inputs to ASR systems , rather than the usual log-mel features .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'The idea ,'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'which combines those of previous work'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( wav2vec and BERT )'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'synergetically ,'}]}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'is intuitive and clearly presented ,'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'significant improvements over log-mel and wav2vec were achieved on ASR benchmarks WSJ and TIMIT .'}]}, {'name': 'satellite:explanation', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:elaboration', 'children': [{'name': 'Based on these merits ,'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'I suggest this paper'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'to be accepted .'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'On the other hand , I would suggest directions for investigation and improvements as follows .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '1 .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:contrast', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'While I understand that vector quantization makes the use of NLP-style BERT-training possible'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( as the inputs to NLP models are discrete tokens ) ,'}]}]}, {'name': 'nucleus:span', 'children': [{'name': 'there are potential disadvantages as well .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'One observation from the submission is that the token set may need to very large'}]}, {'name': 'satellite:summary', 'children': [{'name': '( from tens of thousands to millions )'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'for the system'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'to work well ,'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'making the BERT training computationally expensive'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'satellite:attribution', 'children': [{'name': '( I noticed'}]}, {'name': 'nucleus:span', 'children': [{'name': 'that the BERT model is trained on 128 GPUs ) .'}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Also ,'}]}, {'name': 'satellite:background', 'children': [{'name': 'without BERT pre-training ,'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'using directly the discrete tokens seems'}]}, {'name': 'satellite:enablement', 'children': [{'name': 'to consistently give worse performance for ASR .'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'I think'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'some more motivations or explorations'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( what kind of information did BERT learn )'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'are needed'}]}]}, {'name': 'satellite:enablement', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'to understand'}]}, {'name': 'nucleus:span', 'children': [{'name': 'why that is the case .'}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': '2 .'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Besides the computational expensive-ness of the three-step approach'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( vector quantization , BERT , acoustic model training ) ,'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'the combined model complexity is large'}]}]}, {'name': 'satellite:explanation', 'children': [{'name': 'because these steps do not share neural network architecture .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'A more economical approach is to use BERT-trained model as initialization for acoustic model training ,'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'which is the classical way'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'how RBMs pre-training were used in ASR .'}]}]}]}, {'name': 'satellite:summary', 'children': [{'name': '3 .'}]}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'One concern'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'I have with discrete representation'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'is how robust they are wrt different dataset .'}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'The ASR datasets'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'used in this work are relatively clean'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( but there does exists domain difference between them ) .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:joint', 'children': [{'name': 'It remains to see how the method performs with more acoustically-challenging speech data ,'}]}, {'name': 'nucleus:joint', 'children': [{'name': 'and how universally useful the learned features are ( as is the case for BERT in NLP ) .'}]}]}]}, {'name': 'satellite:enablement', 'children': [{'name': '4 .'}]}]}]}]}]}]}]}, {'name': 'satellite:evaluation', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Another curious question is whether the features would still provide as much improvement'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'when a stronger ASR system than AutoSeg'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( e.g. , Lattice-free MMI )'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'is used .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'satellite:contrast', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'Overall ,'}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'while I think'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'the computational cost of the proposed method is high ,'}]}, {'name': 'satellite:cause', 'children': [{'name': 'rendering it less practical at this point ,'}]}]}]}]}, {'name': 'nucleus:span', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'I believe'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'the approach has potential'}]}, {'name': 'satellite:cause', 'children': [{'name': 'and the result'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'obtained so far is already significant .'}]}]}]}]}]}]}]}]}]}]}]};
+computeMaxDepths(root, 0);
+
+// set various parameters
+var textBoxWidth = 500;
+var width = 30 * root.maxDepth + textBoxWidth;
+var height = root.numLeaves * 18;
+var margin = 10;
+var i = 0;
+
+var tree = d3.layout.cluster()
+    .size([height, width]);
+
+var diagonal = d3.svg.diagonal()
+    .projection(function(d) { return [d.y, d.x]; });
+
+var vis = d3.select("#body").append("svg:svg")
+    .attr("width", width)
+    .attr("height", height)
+    .append("svg:g")
+    .attr("transform", "translate(" + margin + ", 0)"); // margin
+
+root.x0 = height / 2;
+root.y0 = 0;
+
+// visualize!
+initVisualization(root);
+
+
+</script>
+<script type="text/javascript">
+
+
+// a function for computing some tree info that will be useful later
+function computeMaxDepths(tree, depth) {
+  tree.depth = depth;
+  tree.maxDepth = tree.depth;
+  
+  tree.numLeaves = 0;
+  if ( !tree.children ) {
+    tree.numLeaves = 1;  // count self as a leaf
+  }
+
+  for (idx in tree.children) {
+    var child = tree.children[idx];
+    computeMaxDepths(child, depth + 1);
+    if (child.maxDepth > tree.maxDepth){
+      tree.maxDepth = child.maxDepth;
+    }
+
+    tree.numLeaves += child.numLeaves;
+  }
+}
+
+
+// figure out the color based on whether the node is a leaf, satellite, or nucleus
+function computeNodeColor(d){
+  if ( !d.children ) {
+    return "#aaa";
+  } else if ( d.name.indexOf("nucleus:") == 0 ) {
+    return "#faa";
+  } else {
+    return "#fff";
+  }
+}
+
+
+// shorten the text to display (and hide nonterminal labels)
+function computeNodeText (d) {
+  if ( d.children ) {
+    return "";
+  } else if ( d.name.length < 60 ) {
+    return d.name;
+  } else {
+    return d.name.substring(0, 56) + " ...";
+  }
+}
+
+
+// this creates the tree visualization
+function initVisualization(source) {
+  
+  // Compute the new tree layout.
+  var nodes = tree.nodes(root);
+
+  // shrink depth to make room for text
+  nodes.forEach(
+    function(d){
+      d.y = d.y * (width - textBoxWidth) / width;
+    }
+  );
+
+  var node = vis.selectAll("g.node")
+      .data(nodes, function(d) { return d.id || (d.id = ++i); });
+
+  // create nodes
+  var nodeEnter = node.enter().append("svg:g")
+      .attr("class", "node")
+      .attr("transform", function(d) { return "translate(" + source.y0 + "," + source.x0 + ")"; })
+
+  // add the circle representing the nodes
+  nodeEnter.append("svg:circle")
+      .attr("r", 6)
+      .style("fill", computeNodeColor);
+
+  // add text next to nodes, if applicable
+  nodeEnter.append("svg:text")
+      .attr("x", 12)
+      .attr("dy", "0.35em")
+      .text(computeNodeText)
+      .style("visibility", function(d) { return d.children ? "hidden" : "visible";} )
+      .style("fill-opacity", 1);
+
+  // add tooltip triggers
+  nodeEnter.on("mouseover", function(d) {
+            tooltipDiv.transition()
+                .duration(100)
+                .style("opacity", 1.0);
+            tooltipDiv.text(d.name)
+                .style("left", (d3.event.pageX + 10) + "px")
+                .style("top", (d3.event.pageY) + "px");
+            })
+        .on("mouseout", function(d) {
+            tooltipDiv.transition()
+                .duration(100)
+                .style("opacity", 0.0);
+        });
+
+  // set node positions
+  node.attr("transform", function(d) { return "translate(" + d.y + "," + d.x + ")"; });
+
+  // add the links between nodes
+  var links = vis.selectAll("path.link")
+      .data(tree.links(nodes), function(d) { return d.target.id; });//TODO remove .data call?
+
+  links.enter().insert("svg:line", "g")
+      .attr("class", "link")
+      .attr("x1", function(d) { return d.source.y; })
+      .attr("y1", function(d) { return d.source.x; })
+      .attr("x2", function(d) { return d.target.y; })
+      .attr("y2", function(d) { return d.target.x; });
+}
+
+
+// create a div element for tooltips
+var tooltipDiv = d3.select("body").append("div")   
+    .attr("class", "tooltip")               
+    .style("opacity", 0);
+
+// get the tree JSON through jinja2
+var root = {'name': 'ROOT', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Thank you for your fruitful comments .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '>> 1 .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': '[ ... ] One observation from the submission is that the token set may need to be very large'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( from tens of thousands to millions )'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'for the system to work well ,'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'satellite:mannermeans', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'making the BERT training computationally expensive [ ...'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': ']'}]}, {'name': 'satellite:attribution', 'children': [{'name': 'I think'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'some more motivation or exploration'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( what kind of information did BERT learn )'}]}]}]}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'is needed to understand'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'why that is the case .'}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Our BERT vocabulary sizes'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( 13.5k for the gumbel version and 23k for the k-means version )'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'compare favorably to the setups'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'commonly used in NLP'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'where vocabularies are double or triple of our sizes .'}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'We agree'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'that it would be interesting to perform an in-depth analysis on the embeddings'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'learned by BERT'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'and we will investigate this in future work .'}]}, {'name': 'satellite:explanation', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Here we focus on a new quantization method'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'evaluated via downstream performance in phone and speech recognition settings'}]}, {'name': 'satellite:mannermeans', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'by employing models'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'that worked well'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( and were extensively tuned ) in NLP contexts .'}]}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': '>> 2 .'}]}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'A more economical approach is to use BERT-trained model as initialization for acoustic model training ,'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'which is the classical way'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'how RBMs pre-training were used in ASR .'}]}]}]}]}]}]}]}, {'name': 'satellite:evaluation', 'children': [{'name': 'Yes , this is an interesting avenue for future work !'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'We did not follow this direction due to two motivations :'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'first , our aim is to contribute a new quantization scheme for audio data'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'that is trained to predict the context in a self-supervised way .'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'Second , we wanted to show'}]}, {'name': 'nucleus:span', 'children': [{'name': 'that good performance can be achieved with discretized audio on actual speech tasks .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': '>> 3 .'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'One concern'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'I have with discrete representation'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'is how robust they are wrt different dataset .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'We agree'}]}, {'name': 'nucleus:span', 'children': [{'name': 'that an ablation study on robustness of the embeddings across different datasets would be very interesting .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Here we are mostly focusing on relatively clean data'}]}, {'name': 'satellite:attribution', 'children': [{'name': '( WSJ , TIMIT , Librispeech )'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'following the original wav2vec paper'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'but we would be interested in exploring robustness in the future .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'However we note'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'that representations transfer at least well across datasets from the “clean speech” domain :'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:joint', 'children': [{'name': 'vq-wav2vec and BERT is only trained on Librispeech'}]}, {'name': 'nucleus:joint', 'children': [{'name': 'and never tuned on TIMIT/WSJ .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': '>> 4 .'}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Another curious question is whether the features would still provide as much improvement'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'when a stronger ASR system than AutoSeg'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( e.g. , Lattice-free MMI )'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'is used .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'The original wav2vec paper'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( Schneider et al. , 2019 )'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'reports'}]}]}, {'name': 'nucleus:span', 'children': [{'name': 'better results than LF-MMI on the WSJ benchmark , however , the two setups are not strictly comparable .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:elaboration', 'children': [{'name': 'In some sense ,'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'the LF-MMI result has an edge'}]}, {'name': 'satellite:explanation', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'because it is based on a phoneme-based ASR system'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'which is typically stronger than the character-based ASR system'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'used with wav2vec .'}]}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'We agree'}]}, {'name': 'nucleus:span', 'children': [{'name': 'that evaluation on stronger baselines is an important future direction though .'}]}]}]}]}]}]}]}]}]}]}]}]}]}]};
+computeMaxDepths(root, 0);
+
+// set various parameters
+var textBoxWidth = 500;
+var width = 30 * root.maxDepth + textBoxWidth;
+var height = root.numLeaves * 18;
+var margin = 10;
+var i = 0;
+
+var tree = d3.layout.cluster()
+    .size([height, width]);
+
+var diagonal = d3.svg.diagonal()
+    .projection(function(d) { return [d.y, d.x]; });
+
+var vis = d3.select("#body").append("svg:svg")
+    .attr("width", width)
+    .attr("height", height)
+    .append("svg:g")
+    .attr("transform", "translate(" + margin + ", 0)"); // margin
+
+root.x0 = height / 2;
+root.y0 = 0;
+
+// visualize!
+initVisualization(root);
+
+
+</script>
+<script type="text/javascript">
+
+
+// a function for computing some tree info that will be useful later
+function computeMaxDepths(tree, depth) {
+  tree.depth = depth;
+  tree.maxDepth = tree.depth;
+  
+  tree.numLeaves = 0;
+  if ( !tree.children ) {
+    tree.numLeaves = 1;  // count self as a leaf
+  }
+
+  for (idx in tree.children) {
+    var child = tree.children[idx];
+    computeMaxDepths(child, depth + 1);
+    if (child.maxDepth > tree.maxDepth){
+      tree.maxDepth = child.maxDepth;
+    }
+
+    tree.numLeaves += child.numLeaves;
+  }
+}
+
+
+// figure out the color based on whether the node is a leaf, satellite, or nucleus
+function computeNodeColor(d){
+  if ( !d.children ) {
+    return "#aaa";
+  } else if ( d.name.indexOf("nucleus:") == 0 ) {
+    return "#faa";
+  } else {
+    return "#fff";
+  }
+}
+
+
+// shorten the text to display (and hide nonterminal labels)
+function computeNodeText (d) {
+  if ( d.children ) {
+    return "";
+  } else if ( d.name.length < 60 ) {
+    return d.name;
+  } else {
+    return d.name.substring(0, 56) + " ...";
+  }
+}
+
+
+// this creates the tree visualization
+function initVisualization(source) {
+  
+  // Compute the new tree layout.
+  var nodes = tree.nodes(root);
+
+  // shrink depth to make room for text
+  nodes.forEach(
+    function(d){
+      d.y = d.y * (width - textBoxWidth) / width;
+    }
+  );
+
+  var node = vis.selectAll("g.node")
+      .data(nodes, function(d) { return d.id || (d.id = ++i); });
+
+  // create nodes
+  var nodeEnter = node.enter().append("svg:g")
+      .attr("class", "node")
+      .attr("transform", function(d) { return "translate(" + source.y0 + "," + source.x0 + ")"; })
+
+  // add the circle representing the nodes
+  nodeEnter.append("svg:circle")
+      .attr("r", 6)
+      .style("fill", computeNodeColor);
+
+  // add text next to nodes, if applicable
+  nodeEnter.append("svg:text")
+      .attr("x", 12)
+      .attr("dy", "0.35em")
+      .text(computeNodeText)
+      .style("visibility", function(d) { return d.children ? "hidden" : "visible";} )
+      .style("fill-opacity", 1);
+
+  // add tooltip triggers
+  nodeEnter.on("mouseover", function(d) {
+            tooltipDiv.transition()
+                .duration(100)
+                .style("opacity", 1.0);
+            tooltipDiv.text(d.name)
+                .style("left", (d3.event.pageX + 10) + "px")
+                .style("top", (d3.event.pageY) + "px");
+            })
+        .on("mouseout", function(d) {
+            tooltipDiv.transition()
+                .duration(100)
+                .style("opacity", 0.0);
+        });
+
+  // set node positions
+  node.attr("transform", function(d) { return "translate(" + d.y + "," + d.x + ")"; });
+
+  // add the links between nodes
+  var links = vis.selectAll("path.link")
+      .data(tree.links(nodes), function(d) { return d.target.id; });//TODO remove .data call?
+
+  links.enter().insert("svg:line", "g")
+      .attr("class", "link")
+      .attr("x1", function(d) { return d.source.y; })
+      .attr("y1", function(d) { return d.source.x; })
+      .attr("x2", function(d) { return d.target.y; })
+      .attr("y2", function(d) { return d.target.x; });
+}
+
+
+// create a div element for tooltips
+var tooltipDiv = d3.select("body").append("div")   
+    .attr("class", "tooltip")               
+    .style("opacity", 0);
+
+// get the tree JSON through jinja2
+var root = {'name': 'ROOT', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Overview :'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'This paper considers unsupervised'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( or self-supervised )'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'discrete representation learning of speech'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'using a combination of a recent vector quantized neural network discritization method and future time step prediction .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Discrete representations are fine-tuned by using these as input to a BERT model ;'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'the resulting representations are then used instead of conventional speech features as the input'}]}, {'name': 'satellite:enablement', 'children': [{'name': 'to speech recognition models .'}]}]}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'New state-of-the-art results are achieved on two datasets .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Strengths :'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'The core strength of this paper is in the results'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'that are achieved on standard speech recognition benchmarks .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'The results indicate'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'that ,'}]}, {'name': 'satellite:contrast', 'children': [{'name': 'while discritization in itself does not give improvements ,'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'coupling this with the BERT-objective results in speech features'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'which are better in downstream speech recognition than standard features .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'I think'}]}, {'name': 'nucleus:span', 'children': [{'name': 'the main technical novelty is in combining discritization with future time step prediction'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( but see the weakness below ) .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Weaknesses :'}]}, {'name': 'satellite:explanation', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'The main weakness of the paper is that it does not situate itself within existing literature in this area .'}]}, {'name': 'satellite:explanation', 'children': [{'name': 'nucleus:joint', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Over the last few years , researchers in the speech community have invested significant effort'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'in learning better speech representations ,'}]}]}, {'name': 'nucleus:joint', 'children': [{'name': 'and this is not discussed .'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'See e.g .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '[ 1 ] .'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Even more importantly , very recently there has been a number of papers'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'investigating discrete representations of speech ;'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'see the review [ 2 ] .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Some of these papers specifically use VQ-VAEs [ 3 ] .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': '[ 4 ] actually compares VQ-VAE and the Gumbel-Softmax approach .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:joint', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'These studies should be mentioned .'}]}, {'name': 'satellite:evaluation', 'children': [{'name': 'This paper is different in that it incorporates future time step prediction .'}]}]}, {'name': 'nucleus:joint', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'But context prediction has also been considered before , also for speech [ 5 , 6 , 7 ] .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'This paper can be situated as a new contribution'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'combining these two strands of research .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'In the longer run'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'it would be extremely beneficial to the community'}]}, {'name': 'satellite:condition', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'if this approach is applied to the standard benchmarks'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'as set out in [ 2 ] .'}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:joint', 'children': [{'name': 'As a minor weakness , some parts of the paper is not described in enough detail'}]}, {'name': 'nucleus:joint', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'and the motivation is weak or not exactly clear'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( see detailed comments below ) .'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Overall assessment :'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'I think the results as well as the new combination of existing approaches in the paper warrants publication .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'But it should be amended significantly to situate itself within the existing literature .'}]}, {'name': 'satellite:explanation', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'I therefore award a " weak accept" .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Detailed questions and suggestions :'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '- Section 1 :'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'As motivation for this work , it is stated'}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'that " we aim to make well performing NLP algorithms more widely applicable" .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'satellite:background', 'children': [{'name': 'As noted above ,'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'some NLP-like ideas'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( such as prediction of future speech segments ,'}]}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'stemming from text-based language modelling ) have already been considered within the speech community .'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:contrast', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Rather than motivating the work in this way , it might be helpful to focus the contribution as a combination of future time step prediction and discretization'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( both of which have been considered in previous work ,'}]}]}, {'name': 'nucleus:span', 'children': [{'name': 'but not in combination ) .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': '- Section 4 :'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Would it be possible'}]}, {'name': 'satellite:enablement', 'children': [{'name': 'to train the vq-wav2vec model jointly with BERT , i.e .'}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:topiccomment', 'children': [{'name': 'as one model ?'}]}, {'name': 'nucleus:topiccomment', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'I suspect'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'it would be difficult'}]}, {'name': 'satellite:background', 'children': [{'name': 'since , for the masking objective , the discrete units are already required ,'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'satellite:contrast', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'but maybe there is a scheme'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'where this could work .'}]}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': '- Section 2.2 :'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Similarly to the above question , would there be a way'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'to incorporate the BERT principles directly into an end-to-end model , e.g .'}]}]}, {'name': 'satellite:mannermeans', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'by randomly masking some of the continuous input speech ?'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': '- Section 3.3 :'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'What exactly does " mode collapse " refer to in this context ?'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Would this be using only one codebook entry , for instance ?'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': '- Section 6 :'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'It seems'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'that in all cases'}]}, {'name': 'satellite:enablement', 'children': [{'name': 'to obtain improvements from discritization ,'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'BERT is required on top of the vq-wav2vec discrete symbols .'}]}]}]}]}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'Is it possible'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'that the output acoustic model is simply better-matched to continuous rather than discrete input'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:joint', 'children': [{'name': '( direct vq-wav2vec gives discrete'}]}, {'name': 'nucleus:joint', 'children': [{'name': 'while BERT gives continuous ) ?'}]}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Would it make sense'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'to train the wav2vec acoustic model on top of the vqvae codebook entries'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( e )'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'instead of directly on the symbols ?'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Typos , grammar and style :'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': '- " gumbel " -> " Gumbel "'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( throughout ; or just be consistent in capitalization ) -'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': '" which can be mitigated my workarounds "'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': '-> " which can be mitigated *by* workarounds "'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '- " work around " -> " workaround " Missing references : 1 .'}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'Versteegh , M. , Anguera , X. , Jansen , A .'}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': '& Dupoux , E.'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( 2016 ) .'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'The Zero Resource Speech Challenge 2015 :'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'Proposed Approaches and Results .'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'In SLTU-2016 Procedia Computer Science , 81 ,'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': '( pp 67-72 ) .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': '2. https :'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': '//arxiv.org/abs/1904.11469 3. https :'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': '//arxiv.org/abs/1905.11449 4. https :'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': '//arxiv.org/abs/1904.07556 5. https :'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': '//arxiv.org/abs/1904.03240 6. https :'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': '//arxiv.org/abs/1807.03748'}]}, {'name': 'satellite:summary', 'children': [{'name': '( this paper is cited )'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': '7. https :'}]}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': '//arxiv.org/abs/1803.08976 Edit :'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'Based on the feedback from the authors ,'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': "I changed my rating from a ` weak accept ' to an ` accept'."}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]};
+computeMaxDepths(root, 0);
+
+// set various parameters
+var textBoxWidth = 500;
+var width = 30 * root.maxDepth + textBoxWidth;
+var height = root.numLeaves * 18;
+var margin = 10;
+var i = 0;
+
+var tree = d3.layout.cluster()
+    .size([height, width]);
+
+var diagonal = d3.svg.diagonal()
+    .projection(function(d) { return [d.y, d.x]; });
+
+var vis = d3.select("#body").append("svg:svg")
+    .attr("width", width)
+    .attr("height", height)
+    .append("svg:g")
+    .attr("transform", "translate(" + margin + ", 0)"); // margin
+
+root.x0 = height / 2;
+root.y0 = 0;
+
+// visualize!
+initVisualization(root);
+
+
+</script>
+<script type="text/javascript">
+
+
+// a function for computing some tree info that will be useful later
+function computeMaxDepths(tree, depth) {
+  tree.depth = depth;
+  tree.maxDepth = tree.depth;
+  
+  tree.numLeaves = 0;
+  if ( !tree.children ) {
+    tree.numLeaves = 1;  // count self as a leaf
+  }
+
+  for (idx in tree.children) {
+    var child = tree.children[idx];
+    computeMaxDepths(child, depth + 1);
+    if (child.maxDepth > tree.maxDepth){
+      tree.maxDepth = child.maxDepth;
+    }
+
+    tree.numLeaves += child.numLeaves;
+  }
+}
+
+
+// figure out the color based on whether the node is a leaf, satellite, or nucleus
+function computeNodeColor(d){
+  if ( !d.children ) {
+    return "#aaa";
+  } else if ( d.name.indexOf("nucleus:") == 0 ) {
+    return "#faa";
+  } else {
+    return "#fff";
+  }
+}
+
+
+// shorten the text to display (and hide nonterminal labels)
+function computeNodeText (d) {
+  if ( d.children ) {
+    return "";
+  } else if ( d.name.length < 60 ) {
+    return d.name;
+  } else {
+    return d.name.substring(0, 56) + " ...";
+  }
+}
+
+
+// this creates the tree visualization
+function initVisualization(source) {
+  
+  // Compute the new tree layout.
+  var nodes = tree.nodes(root);
+
+  // shrink depth to make room for text
+  nodes.forEach(
+    function(d){
+      d.y = d.y * (width - textBoxWidth) / width;
+    }
+  );
+
+  var node = vis.selectAll("g.node")
+      .data(nodes, function(d) { return d.id || (d.id = ++i); });
+
+  // create nodes
+  var nodeEnter = node.enter().append("svg:g")
+      .attr("class", "node")
+      .attr("transform", function(d) { return "translate(" + source.y0 + "," + source.x0 + ")"; })
+
+  // add the circle representing the nodes
+  nodeEnter.append("svg:circle")
+      .attr("r", 6)
+      .style("fill", computeNodeColor);
+
+  // add text next to nodes, if applicable
+  nodeEnter.append("svg:text")
+      .attr("x", 12)
+      .attr("dy", "0.35em")
+      .text(computeNodeText)
+      .style("visibility", function(d) { return d.children ? "hidden" : "visible";} )
+      .style("fill-opacity", 1);
+
+  // add tooltip triggers
+  nodeEnter.on("mouseover", function(d) {
+            tooltipDiv.transition()
+                .duration(100)
+                .style("opacity", 1.0);
+            tooltipDiv.text(d.name)
+                .style("left", (d3.event.pageX + 10) + "px")
+                .style("top", (d3.event.pageY) + "px");
+            })
+        .on("mouseout", function(d) {
+            tooltipDiv.transition()
+                .duration(100)
+                .style("opacity", 0.0);
+        });
+
+  // set node positions
+  node.attr("transform", function(d) { return "translate(" + d.y + "," + d.x + ")"; });
+
+  // add the links between nodes
+  var links = vis.selectAll("path.link")
+      .data(tree.links(nodes), function(d) { return d.target.id; });//TODO remove .data call?
+
+  links.enter().insert("svg:line", "g")
+      .attr("class", "link")
+      .attr("x1", function(d) { return d.source.y; })
+      .attr("y1", function(d) { return d.source.x; })
+      .attr("x2", function(d) { return d.target.y; })
+      .attr("y2", function(d) { return d.target.x; });
+}
+
+
+// create a div element for tooltips
+var tooltipDiv = d3.select("body").append("div")   
+    .attr("class", "tooltip")               
+    .style("opacity", 0);
+
+// get the tree JSON through jinja2
+var root = {'name': 'ROOT', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Thank you for the fruitful comments !'}]}, {'name': 'satellite:explanation', 'children': [{'name': 'nucleus:joint', 'children': [{'name': 'We addressed your main concern'}]}, {'name': 'nucleus:joint', 'children': [{'name': 'and updated Section 1 of the paper to better situate it in the existing literature .'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': '>> Would it be possible'}]}, {'name': 'satellite:enablement', 'children': [{'name': 'to train the vq-wav2vec model jointly with BERT , i.e .'}]}]}, {'name': 'satellite:background', 'children': [{'name': 'as one model ?'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:joint', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': '[ ... ] Similarly to the above question , would there be a way'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'to incorporate the BERT principles directly into an end-to-end model , e.g .'}]}]}, {'name': 'satellite:mannermeans', 'children': [{'name': 'by randomly masking some of the continuous input speech ?'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'The focus of this paper is a quantization approach for audio .'}]}, {'name': 'satellite:explanation', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Replacing the two-step training process by an adaptation of BERT to continuous data'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': '( using a wav2vec/CPC-like objective function'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'instead of the cross entropy )'}]}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'is an interesting direction for future work'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( and we amended the future work section accordingly ) .'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'However , our current paper is a proof of concept'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'that a pre-training scheme'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'based on masked inputs'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( BERT )'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'can improve over previous methods in the speech domain .'}]}]}]}]}]}]}]}, {'name': 'nucleus:joint', 'children': [{'name': 'nucleus:span', 'children': [{'name': '>> What exactly does " mode collapse " refer to in this context ?'}]}, {'name': 'satellite:explanation', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'In several configurations'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( especially for one and two groups )'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'considerably less codewords'}]}]}, {'name': 'satellite:comparison', 'children': [{'name': 'than theoretically possible are used .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'We loosely refer to mode collapse as the phenomenon'}]}, {'name': 'satellite:background', 'children': [{'name': 'when very few codewords per group are used ( cf .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:joint', 'children': [{'name': 'Appendix A ) .'}]}, {'name': 'nucleus:joint', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'We updated the paper to also refer to the appendix'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'where we outline the number of codewords'}]}, {'name': 'nucleus:span', 'children': [{'name': 'that the model uses .'}]}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'We observed'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'that in the “few group regime”'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( G=1...4 ) ,'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'only a few of the available centroids per group are used'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'and refer to this phenomenon as mode collapse — for BERT training ,'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'this is actually favorable e.g .'}]}, {'name': 'satellite:explanation', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'in the G=2 , V=320 setting'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'as it yields a codebook of acceptable size for NLP model training'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( 13.5k/23k ) .'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Mode collapse could potentially be circumvented by strategies like embedding re-initialization'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'used in classical k-means and this is an interesting avenue for future work .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': '>> [ ...'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '] BERT is required on top of the vq-wav2vec discrete symbols .'}]}]}]}]}]}]}]}]}]}, {'name': 'nucleus:joint', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'Is it possible'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'that the output acoustic model is simply better-matched to continuous rather than discrete input'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:joint', 'children': [{'name': '( direct vq-wav2vec gives discrete'}]}, {'name': 'nucleus:joint', 'children': [{'name': 'while BERT gives continuous ) ?'}]}]}]}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Would it make sense'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:joint', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'to train the wav2vec acoustic model on top of the vqvae codebook entries'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( e )'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'instead of directly on the symbols ?'}]}]}, {'name': 'nucleus:joint', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'We actually did what you suggest'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': ':'}]}, {'name': 'satellite:background', 'children': [{'name': 'when we train acoustic models on top of vq-wav2vec ,'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'we input the dense embedding vectors corresponding to the discrete codewords .'}]}]}]}, {'name': 'nucleus:joint', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'On the other hand , we also trained an NLP sequence to sequence'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( Section 6.3 )'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:temporal', 'children': [{'name': 'which takes the quantized audio codes as input'}]}, {'name': 'nucleus:temporal', 'children': [{'name': 'and then generates the transcriptions .'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:joint', 'children': [{'name': 'This gives reasonable accuracy'}]}, {'name': 'nucleus:joint', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'and suggests'}]}, {'name': 'nucleus:span', 'children': [{'name': 'that the discrete codes by themselves , and without the learned continuous representations , are useful .'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'We clarified this in the updated version of the paper .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'We believe'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'the reason'}]}, {'name': 'satellite:explanation', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'the dense embeddings for the discrete codewords work less well is because they do not encode as much detailed context information as a representation'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'built by wav2vec or BERT .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'The information in the codebook is ultimately less detailed than a context vector specific to the current input sequence .'}]}]}]}]}]}]}]}]}]}]};
+computeMaxDepths(root, 0);
+
+// set various parameters
+var textBoxWidth = 500;
+var width = 30 * root.maxDepth + textBoxWidth;
+var height = root.numLeaves * 18;
+var margin = 10;
+var i = 0;
+
+var tree = d3.layout.cluster()
+    .size([height, width]);
+
+var diagonal = d3.svg.diagonal()
+    .projection(function(d) { return [d.y, d.x]; });
+
+var vis = d3.select("#body").append("svg:svg")
+    .attr("width", width)
+    .attr("height", height)
+    .append("svg:g")
+    .attr("transform", "translate(" + margin + ", 0)"); // margin
+
+root.x0 = height / 2;
+root.y0 = 0;
+
+// visualize!
+initVisualization(root);
+
+
+</script>
+<script type="text/javascript">
+
+
+// a function for computing some tree info that will be useful later
+function computeMaxDepths(tree, depth) {
+  tree.depth = depth;
+  tree.maxDepth = tree.depth;
+  
+  tree.numLeaves = 0;
+  if ( !tree.children ) {
+    tree.numLeaves = 1;  // count self as a leaf
+  }
+
+  for (idx in tree.children) {
+    var child = tree.children[idx];
+    computeMaxDepths(child, depth + 1);
+    if (child.maxDepth > tree.maxDepth){
+      tree.maxDepth = child.maxDepth;
+    }
+
+    tree.numLeaves += child.numLeaves;
+  }
+}
+
+
+// figure out the color based on whether the node is a leaf, satellite, or nucleus
+function computeNodeColor(d){
+  if ( !d.children ) {
+    return "#aaa";
+  } else if ( d.name.indexOf("nucleus:") == 0 ) {
+    return "#faa";
+  } else {
+    return "#fff";
+  }
+}
+
+
+// shorten the text to display (and hide nonterminal labels)
+function computeNodeText (d) {
+  if ( d.children ) {
+    return "";
+  } else if ( d.name.length < 60 ) {
+    return d.name;
+  } else {
+    return d.name.substring(0, 56) + " ...";
+  }
+}
+
+
+// this creates the tree visualization
+function initVisualization(source) {
+  
+  // Compute the new tree layout.
+  var nodes = tree.nodes(root);
+
+  // shrink depth to make room for text
+  nodes.forEach(
+    function(d){
+      d.y = d.y * (width - textBoxWidth) / width;
+    }
+  );
+
+  var node = vis.selectAll("g.node")
+      .data(nodes, function(d) { return d.id || (d.id = ++i); });
+
+  // create nodes
+  var nodeEnter = node.enter().append("svg:g")
+      .attr("class", "node")
+      .attr("transform", function(d) { return "translate(" + source.y0 + "," + source.x0 + ")"; })
+
+  // add the circle representing the nodes
+  nodeEnter.append("svg:circle")
+      .attr("r", 6)
+      .style("fill", computeNodeColor);
+
+  // add text next to nodes, if applicable
+  nodeEnter.append("svg:text")
+      .attr("x", 12)
+      .attr("dy", "0.35em")
+      .text(computeNodeText)
+      .style("visibility", function(d) { return d.children ? "hidden" : "visible";} )
+      .style("fill-opacity", 1);
+
+  // add tooltip triggers
+  nodeEnter.on("mouseover", function(d) {
+            tooltipDiv.transition()
+                .duration(100)
+                .style("opacity", 1.0);
+            tooltipDiv.text(d.name)
+                .style("left", (d3.event.pageX + 10) + "px")
+                .style("top", (d3.event.pageY) + "px");
+            })
+        .on("mouseout", function(d) {
+            tooltipDiv.transition()
+                .duration(100)
+                .style("opacity", 0.0);
+        });
+
+  // set node positions
+  node.attr("transform", function(d) { return "translate(" + d.y + "," + d.x + ")"; });
+
+  // add the links between nodes
+  var links = vis.selectAll("path.link")
+      .data(tree.links(nodes), function(d) { return d.target.id; });//TODO remove .data call?
+
+  links.enter().insert("svg:line", "g")
+      .attr("class", "link")
+      .attr("x1", function(d) { return d.source.y; })
+      .attr("y1", function(d) { return d.source.x; })
+      .attr("x2", function(d) { return d.target.y; })
+      .attr("y2", function(d) { return d.target.x; });
+}
+
+
+// create a div element for tooltips
+var tooltipDiv = d3.select("body").append("div")   
+    .attr("class", "tooltip")               
+    .style("opacity", 0);
+
+// get the tree JSON through jinja2
+var root = {'name': 'ROOT', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'The paper proposes a way'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'to pre-train quantized representations for speech .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'The approach'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'proposed is a two-stage process :'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': '1. train a quantized version of wav2vec'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': '[ my understanding is that wav2vec is the same thing as CPC for Audio except for using a binary cross-entropy loss instead of InfoNCE softmax-cross entropy loss ] .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'the authors propose'}]}, {'name': 'satellite:enablement', 'children': [{'name': 'to use gumbel softmax / VQ codebook for the vector quantization .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': '2.'}]}, {'name': 'satellite:background', 'children': [{'name': 'once you have a discrete representation ,'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'you could train BERT'}]}, {'name': 'satellite:condition', 'children': [{'name': '( as if it were a seq of language tokens ) .'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'this makes a lot of sense especially given'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:joint', 'children': [{'name': 'that CPC / wav2vec recovers phonemes'}]}, {'name': 'nucleus:joint', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'and quantizing'}]}, {'name': 'nucleus:span', 'children': [{'name': 'the phonemes will recover a language-like version of the raw audio .'}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:joint', 'children': [{'name': 'And running BERT across those tokens will allow you to capture the dependencies at the phoneme level .'}]}, {'name': 'nucleus:joint', 'children': [{'name': 'After pre-training , the authors use the learned representations for speech recognition .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'They compare this to using log-mel filterbanks .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:joint', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'The results'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( WER / LER )'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'is lower for the proposed pipeline'}]}, {'name': 'satellite:comparison', 'children': [{'name': 'compared to using dense wav2vec representation for n-gram and character LM .'}]}]}]}, {'name': 'nucleus:joint', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'It also makes sense'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'that BERT helps for the k-means'}]}, {'name': 'satellite:summary', 'children': [{'name': '( vq )'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'setting'}]}]}, {'name': 'nucleus:span', 'children': [{'name': 'since the number of codes is large .'}]}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'The authors also cleverly adopt/adapt span-BERT'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'which is more suited to this setting .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'I think'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'this paper presents a useful contribution as far as improving speech / phoneme recognition'}]}, {'name': 'satellite:mannermeans', 'children': [{'name': 'nucleus:joint', 'children': [{'name': 'using self-supervised learning goes ,'}]}, {'name': 'nucleus:joint', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'and also has useful engineering aspects in terms'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'of combining CPC and BERT .'}]}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'I would like to see this paper accepted .'}]}]}]}]}]}]}]}]}]}]}]}]}]};
+computeMaxDepths(root, 0);
+
+// set various parameters
+var textBoxWidth = 500;
+var width = 30 * root.maxDepth + textBoxWidth;
+var height = root.numLeaves * 18;
+var margin = 10;
+var i = 0;
+
+var tree = d3.layout.cluster()
+    .size([height, width]);
+
+var diagonal = d3.svg.diagonal()
+    .projection(function(d) { return [d.y, d.x]; });
+
+var vis = d3.select("#body").append("svg:svg")
+    .attr("width", width)
+    .attr("height", height)
+    .append("svg:g")
+    .attr("transform", "translate(" + margin + ", 0)"); // margin
+
+root.x0 = height / 2;
+root.y0 = 0;
+
+// visualize!
+initVisualization(root);
+
+
+</script>
+<script type="text/javascript">
+
+
+// a function for computing some tree info that will be useful later
+function computeMaxDepths(tree, depth) {
+  tree.depth = depth;
+  tree.maxDepth = tree.depth;
+  
+  tree.numLeaves = 0;
+  if ( !tree.children ) {
+    tree.numLeaves = 1;  // count self as a leaf
+  }
+
+  for (idx in tree.children) {
+    var child = tree.children[idx];
+    computeMaxDepths(child, depth + 1);
+    if (child.maxDepth > tree.maxDepth){
+      tree.maxDepth = child.maxDepth;
+    }
+
+    tree.numLeaves += child.numLeaves;
+  }
+}
+
+
+// figure out the color based on whether the node is a leaf, satellite, or nucleus
+function computeNodeColor(d){
+  if ( !d.children ) {
+    return "#aaa";
+  } else if ( d.name.indexOf("nucleus:") == 0 ) {
+    return "#faa";
+  } else {
+    return "#fff";
+  }
+}
+
+
+// shorten the text to display (and hide nonterminal labels)
+function computeNodeText (d) {
+  if ( d.children ) {
+    return "";
+  } else if ( d.name.length < 60 ) {
+    return d.name;
+  } else {
+    return d.name.substring(0, 56) + " ...";
+  }
+}
+
+
+// this creates the tree visualization
+function initVisualization(source) {
+  
+  // Compute the new tree layout.
+  var nodes = tree.nodes(root);
+
+  // shrink depth to make room for text
+  nodes.forEach(
+    function(d){
+      d.y = d.y * (width - textBoxWidth) / width;
+    }
+  );
+
+  var node = vis.selectAll("g.node")
+      .data(nodes, function(d) { return d.id || (d.id = ++i); });
+
+  // create nodes
+  var nodeEnter = node.enter().append("svg:g")
+      .attr("class", "node")
+      .attr("transform", function(d) { return "translate(" + source.y0 + "," + source.x0 + ")"; })
+
+  // add the circle representing the nodes
+  nodeEnter.append("svg:circle")
+      .attr("r", 6)
+      .style("fill", computeNodeColor);
+
+  // add text next to nodes, if applicable
+  nodeEnter.append("svg:text")
+      .attr("x", 12)
+      .attr("dy", "0.35em")
+      .text(computeNodeText)
+      .style("visibility", function(d) { return d.children ? "hidden" : "visible";} )
+      .style("fill-opacity", 1);
+
+  // add tooltip triggers
+  nodeEnter.on("mouseover", function(d) {
+            tooltipDiv.transition()
+                .duration(100)
+                .style("opacity", 1.0);
+            tooltipDiv.text(d.name)
+                .style("left", (d3.event.pageX + 10) + "px")
+                .style("top", (d3.event.pageY) + "px");
+            })
+        .on("mouseout", function(d) {
+            tooltipDiv.transition()
+                .duration(100)
+                .style("opacity", 0.0);
+        });
+
+  // set node positions
+  node.attr("transform", function(d) { return "translate(" + d.y + "," + d.x + ")"; });
+
+  // add the links between nodes
+  var links = vis.selectAll("path.link")
+      .data(tree.links(nodes), function(d) { return d.target.id; });//TODO remove .data call?
+
+  links.enter().insert("svg:line", "g")
+      .attr("class", "link")
+      .attr("x1", function(d) { return d.source.y; })
+      .attr("y1", function(d) { return d.source.x; })
+      .attr("x2", function(d) { return d.target.y; })
+      .attr("y2", function(d) { return d.target.x; });
+}
+
+
+// create a div element for tooltips
+var tooltipDiv = d3.select("body").append("div")   
+    .attr("class", "tooltip")               
+    .style("opacity", 0);
+
+// get the tree JSON through jinja2
+var root = {'name': 'ROOT', 'children': [{'name': 'Thank you for your comments !'}]};
+computeMaxDepths(root, 0);
+
+// set various parameters
+var textBoxWidth = 500;
+var width = 30 * root.maxDepth + textBoxWidth;
+var height = root.numLeaves * 18;
+var margin = 10;
+var i = 0;
+
+var tree = d3.layout.cluster()
+    .size([height, width]);
+
+var diagonal = d3.svg.diagonal()
+    .projection(function(d) { return [d.y, d.x]; });
+
+var vis = d3.select("#body").append("svg:svg")
+    .attr("width", width)
+    .attr("height", height)
+    .append("svg:g")
+    .attr("transform", "translate(" + margin + ", 0)"); // margin
+
+root.x0 = height / 2;
+root.y0 = 0;
+
+// visualize!
+initVisualization(root);
+
+
+</script>
+<script type="text/javascript">
+
+
+// a function for computing some tree info that will be useful later
+function computeMaxDepths(tree, depth) {
+  tree.depth = depth;
+  tree.maxDepth = tree.depth;
+  
+  tree.numLeaves = 0;
+  if ( !tree.children ) {
+    tree.numLeaves = 1;  // count self as a leaf
+  }
+
+  for (idx in tree.children) {
+    var child = tree.children[idx];
+    computeMaxDepths(child, depth + 1);
+    if (child.maxDepth > tree.maxDepth){
+      tree.maxDepth = child.maxDepth;
+    }
+
+    tree.numLeaves += child.numLeaves;
+  }
+}
+
+
+// figure out the color based on whether the node is a leaf, satellite, or nucleus
+function computeNodeColor(d){
+  if ( !d.children ) {
+    return "#aaa";
+  } else if ( d.name.indexOf("nucleus:") == 0 ) {
+    return "#faa";
+  } else {
+    return "#fff";
+  }
+}
+
+
+// shorten the text to display (and hide nonterminal labels)
+function computeNodeText (d) {
+  if ( d.children ) {
+    return "";
+  } else if ( d.name.length < 60 ) {
+    return d.name;
+  } else {
+    return d.name.substring(0, 56) + " ...";
+  }
+}
+
+
+// this creates the tree visualization
+function initVisualization(source) {
+  
+  // Compute the new tree layout.
+  var nodes = tree.nodes(root);
+
+  // shrink depth to make room for text
+  nodes.forEach(
+    function(d){
+      d.y = d.y * (width - textBoxWidth) / width;
+    }
+  );
+
+  var node = vis.selectAll("g.node")
+      .data(nodes, function(d) { return d.id || (d.id = ++i); });
+
+  // create nodes
+  var nodeEnter = node.enter().append("svg:g")
+      .attr("class", "node")
+      .attr("transform", function(d) { return "translate(" + source.y0 + "," + source.x0 + ")"; })
+
+  // add the circle representing the nodes
+  nodeEnter.append("svg:circle")
+      .attr("r", 6)
+      .style("fill", computeNodeColor);
+
+  // add text next to nodes, if applicable
+  nodeEnter.append("svg:text")
+      .attr("x", 12)
+      .attr("dy", "0.35em")
+      .text(computeNodeText)
+      .style("visibility", function(d) { return d.children ? "hidden" : "visible";} )
+      .style("fill-opacity", 1);
+
+  // add tooltip triggers
+  nodeEnter.on("mouseover", function(d) {
+            tooltipDiv.transition()
+                .duration(100)
+                .style("opacity", 1.0);
+            tooltipDiv.text(d.name)
+                .style("left", (d3.event.pageX + 10) + "px")
+                .style("top", (d3.event.pageY) + "px");
+            })
+        .on("mouseout", function(d) {
+            tooltipDiv.transition()
+                .duration(100)
+                .style("opacity", 0.0);
+        });
+
+  // set node positions
+  node.attr("transform", function(d) { return "translate(" + d.y + "," + d.x + ")"; });
+
+  // add the links between nodes
+  var links = vis.selectAll("path.link")
+      .data(tree.links(nodes), function(d) { return d.target.id; });//TODO remove .data call?
+
+  links.enter().insert("svg:line", "g")
+      .attr("class", "link")
+      .attr("x1", function(d) { return d.source.y; })
+      .attr("y1", function(d) { return d.source.x; })
+      .attr("x2", function(d) { return d.target.y; })
+      .attr("y2", function(d) { return d.target.x; });
+}
+
+
+// create a div element for tooltips
+var tooltipDiv = d3.select("body").append("div")   
+    .attr("class", "tooltip")               
+    .style("opacity", 0);
+
+// get the tree JSON through jinja2
+var root = {'name': 'ROOT', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Though rather dense in its exposition , this paper is an interesting contribution to the area of self-supervised learning'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'based on discrete representations .'}]}]}, {'name': 'satellite:explanation', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'What would make it stronger imo is to address the issue of how much is gained from a discrete vs. continuous representation .'}]}, {'name': 'satellite:explanation', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'The authors take it'}]}, {'name': 'satellite:cause', 'children': [{'name': 'satellite:background', 'children': [{'name': 'as a given that discrete is good'}]}, {'name': 'nucleus:span', 'children': [{'name': 'because it allows us to leverage work in NLP .'}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'That makes sense'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '-- but at what cost ?'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:attribution', 'children': [{'name': '" Table 4 shows'}]}, {'name': 'nucleus:span', 'children': [{'name': 'that our first results are promising ,'}]}]}, {'name': 'satellite:contrast', 'children': [{'name': 'even though they are not as good as the state of the art. "'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'The state of the art on LibriSpeech is not Mohamed at al .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '2019 .'}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'See e.g .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Irie et al .'}]}, {'name': 'satellite:explanation', 'children': [{'name': 'Interspeech 2019 for better result The Conclusion is very sparse .'}]}]}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': '" In future work , we are planning to apply other algorithms'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'requiring discrete inputs to audio data " :'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'can you elaborate ?'}]}]}]}]};
+computeMaxDepths(root, 0);
+
+// set various parameters
+var textBoxWidth = 500;
+var width = 30 * root.maxDepth + textBoxWidth;
+var height = root.numLeaves * 18;
+var margin = 10;
+var i = 0;
+
+var tree = d3.layout.cluster()
+    .size([height, width]);
+
+var diagonal = d3.svg.diagonal()
+    .projection(function(d) { return [d.y, d.x]; });
+
+var vis = d3.select("#body").append("svg:svg")
+    .attr("width", width)
+    .attr("height", height)
+    .append("svg:g")
+    .attr("transform", "translate(" + margin + ", 0)"); // margin
+
+root.x0 = height / 2;
+root.y0 = 0;
+
+// visualize!
+initVisualization(root);
+
+
+</script>
+<script type="text/javascript">
+
+
+// a function for computing some tree info that will be useful later
+function computeMaxDepths(tree, depth) {
+  tree.depth = depth;
+  tree.maxDepth = tree.depth;
+  
+  tree.numLeaves = 0;
+  if ( !tree.children ) {
+    tree.numLeaves = 1;  // count self as a leaf
+  }
+
+  for (idx in tree.children) {
+    var child = tree.children[idx];
+    computeMaxDepths(child, depth + 1);
+    if (child.maxDepth > tree.maxDepth){
+      tree.maxDepth = child.maxDepth;
+    }
+
+    tree.numLeaves += child.numLeaves;
+  }
+}
+
+
+// figure out the color based on whether the node is a leaf, satellite, or nucleus
+function computeNodeColor(d){
+  if ( !d.children ) {
+    return "#aaa";
+  } else if ( d.name.indexOf("nucleus:") == 0 ) {
+    return "#faa";
+  } else {
+    return "#fff";
+  }
+}
+
+
+// shorten the text to display (and hide nonterminal labels)
+function computeNodeText (d) {
+  if ( d.children ) {
+    return "";
+  } else if ( d.name.length < 60 ) {
+    return d.name;
+  } else {
+    return d.name.substring(0, 56) + " ...";
+  }
+}
+
+
+// this creates the tree visualization
+function initVisualization(source) {
+  
+  // Compute the new tree layout.
+  var nodes = tree.nodes(root);
+
+  // shrink depth to make room for text
+  nodes.forEach(
+    function(d){
+      d.y = d.y * (width - textBoxWidth) / width;
+    }
+  );
+
+  var node = vis.selectAll("g.node")
+      .data(nodes, function(d) { return d.id || (d.id = ++i); });
+
+  // create nodes
+  var nodeEnter = node.enter().append("svg:g")
+      .attr("class", "node")
+      .attr("transform", function(d) { return "translate(" + source.y0 + "," + source.x0 + ")"; })
+
+  // add the circle representing the nodes
+  nodeEnter.append("svg:circle")
+      .attr("r", 6)
+      .style("fill", computeNodeColor);
+
+  // add text next to nodes, if applicable
+  nodeEnter.append("svg:text")
+      .attr("x", 12)
+      .attr("dy", "0.35em")
+      .text(computeNodeText)
+      .style("visibility", function(d) { return d.children ? "hidden" : "visible";} )
+      .style("fill-opacity", 1);
+
+  // add tooltip triggers
+  nodeEnter.on("mouseover", function(d) {
+            tooltipDiv.transition()
+                .duration(100)
+                .style("opacity", 1.0);
+            tooltipDiv.text(d.name)
+                .style("left", (d3.event.pageX + 10) + "px")
+                .style("top", (d3.event.pageY) + "px");
+            })
+        .on("mouseout", function(d) {
+            tooltipDiv.transition()
+                .duration(100)
+                .style("opacity", 0.0);
+        });
+
+  // set node positions
+  node.attr("transform", function(d) { return "translate(" + d.y + "," + d.x + ")"; });
+
+  // add the links between nodes
+  var links = vis.selectAll("path.link")
+      .data(tree.links(nodes), function(d) { return d.target.id; });//TODO remove .data call?
+
+  links.enter().insert("svg:line", "g")
+      .attr("class", "link")
+      .attr("x1", function(d) { return d.source.y; })
+      .attr("y1", function(d) { return d.source.x; })
+      .attr("x2", function(d) { return d.target.y; })
+      .attr("y2", function(d) { return d.target.x; });
+}
+
+
+// create a div element for tooltips
+var tooltipDiv = d3.select("body").append("div")   
+    .attr("class", "tooltip")               
+    .style("opacity", 0);
+
+// get the tree JSON through jinja2
+var root = {'name': 'ROOT', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Thank you for your fruitful comments .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:attribution', 'children': [{'name': '>> What would make'}]}, {'name': 'nucleus:span', 'children': [{'name': 'it stronger imo is to address the issue of how much is gained from a discrete vs. continuous representation .'}]}]}, {'name': 'satellite:explanation', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:same-unit', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Discrete representations by themselves are not better than continuous ones'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '( cf .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'Table 1 ,'}]}]}, {'name': 'nucleus:same-unit', 'children': [{'name': 'wav2vec vs. vq-wav2vec ) .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'However , discretization enables the application of existing algorithms from the NLP literature'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'which were designed for discrete inputs .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'We show'}]}, {'name': 'nucleus:span', 'children': [{'name': 'that the BERT model can be directly applied to discretized speech .'}]}]}, {'name': 'satellite:evaluation', 'children': [{'name': 'BERT can better model context than ( vq- ) wav2vec .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:attribution', 'children': [{'name': '>> The authors take it as a given'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'that discrete is good'}]}, {'name': 'satellite:cause', 'children': [{'name': 'because it allows us to leverage work in NLP .'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'That makes sense'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '-- but at what cost ?'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'satellite:attribution', 'children': [{'name': 'Chaining vq-wav2vec and BERT requires'}]}, {'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'more computational effort than just wav2vec , however , it does improve accuracy'}]}, {'name': 'satellite:background', 'children': [{'name': 'as our results show ( cf .'}]}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'Table 1 ) .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'Running BERT requires roughly as much computational overhead as just vq-wav2vec .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': '>> The state of the art on LibriSpeech is not Mohamed at al .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': '2019 .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'See e.g .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Irie et al .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Interspeech 2019 for better result .'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'nucleus:span', 'children': [{'name': 'Thanks for pointing this out , we fixed this in the updated version of the paper'}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'we just posted .'}]}]}, {'name': 'satellite:explanation', 'children': [{'name': '>> The Conclusion is very sparse .'}]}]}, {'name': 'satellite:elaboration', 'children': [{'name': 'We broadened conclusion and delineated additional future work .'}]}]}]}]}]}]}]}]}]}]}]}]}]}]};
+computeMaxDepths(root, 0);
+
+// set various parameters
+var textBoxWidth = 500;
+var width = 30 * root.maxDepth + textBoxWidth;
+var height = root.numLeaves * 18;
+var margin = 10;
+var i = 0;
+
+var tree = d3.layout.cluster()
+    .size([height, width]);
+
+var diagonal = d3.svg.diagonal()
+    .projection(function(d) { return [d.y, d.x]; });
+
+var vis = d3.select("#body").append("svg:svg")
+    .attr("width", width)
+    .attr("height", height)
+    .append("svg:g")
+    .attr("transform", "translate(" + margin + ", 0)"); // margin
+
+root.x0 = height / 2;
+root.y0 = 0;
+
+// visualize!
+initVisualization(root);
+
+
+</script>
 
 </body>
 </html>
