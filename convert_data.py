@@ -2,12 +2,69 @@ import collections
 import glob
 import json
 import lisp_lib
-from transformers import RobertaTokenizer
+#from transformers import RobertaTokenizer
 
 TRAINING_PATH = "rst_discourse_treebank/data/RSTtrees-WSJ-main-1.0/TRAINING/*.dis"
 
-ROBERTA_TOKENIZER = RobertaTokenizer.from_pretrained("roberta-base")
+#ROBERTA_TOKENIZER = RobertaTokenizer.from_pretrained("roberta-base")
 
+HORRIBLE_MAP = {
+'antithesis': 'contrast',
+'antithesis-e': 'contrast',
+'attribution': 'attribution',
+'attribution-e': 'attribution',
+'attribution-n': 'attribution',
+'attribution': 'attribution',
+'background': 'background',
+'circumstance': 'background',
+'circumstance-e': 'background',
+'comment': 'topic-comment',
+'comment-e': 'topic-comment',
+'comment': 'topic-comment',
+'comparison': 'comparison',
+'concession': 'contrast',
+'concession-e': 'contrast',
+'condition': 'condition',
+'condition-e': 'condition',
+'consequence-n': 'cause',
+'consequence-n-e': 'cause',
+'consequence-s': 'cause',
+'consequence-s-e': 'cause',
+'contingency': 'condition',
+'elaboration-additional': 'elaboration',
+'elaboration-additional-e': 'elaboration',
+'elaboration-general-specific': 'elaboration',
+'elaboration-general-specific-e': 'elaboration',
+'elaboration-object-attribute': 'elaboration',
+'elaboration-object-attribute-e': 'elaboration',
+'elaboration-process-step': 'elaboration',
+'elaboration-set-member': 'elaboration',
+'elaboration-set-member-e': 'elaboration',
+'enablement': 'enablement',
+'evaluation-s': 'evaluation',
+'evidence': 'explanation',
+'example': 'elaboration',
+'explanation-argumentative': 'explanation',
+'hypothetical': 'condition',
+'interpretation-s': 'evaluation',
+'manner': 'mannermeans',
+'means': 'mannermeans',
+'means-e': 'mannermeans',
+'otherwise': 'condition',
+'purpose': 'enablement',
+'purpose-e': 'enablement',
+'reason': 'explanation',
+'restatement': 'summary',
+'restatement-e': 'summary',
+'result': 'cause',
+'rhetorical-question': 'topic-comment',
+'same_unit': '',
+'summary-n': 'summary',
+'summary-s': 'summary',
+'temporal-after': 'temporal',
+'temporal-before': 'temporal',
+'temporal-same-time': 'temporal',
+}
 
 def bracket_conversion(parse_text):
     in_text = False
@@ -26,24 +83,13 @@ def bracket_conversion(parse_text):
 
 
 def get_segmentation_format(parsed, edus):
-    all_tokens = " ".join(sum(edus[1:], []))
-    roberta_tokenized = ROBERTA_TOKENIZER.tokenize(all_tokens)
-    labeled_roberta_tokens = []
-    for edu in edus[1:]:
-        first_added = False
-        nonspace_chars_to_match = len("".join(edu))
-        while nonspace_chars_to_match:
-            curr_roberta_token = roberta_tokenized.pop(0)
-            nonspace_chars_to_match -= len(curr_roberta_token)
-            if curr_roberta_token.startswith("Ġ"):
-                nonspace_chars_to_match += 1
-            if first_added:
-                label = "I"
-            else:
-                label = "B"
-                first_added = True
-            labeled_roberta_tokens.append((curr_roberta_token, label))
-    return labeled_roberta_tokens
+
+  examples = []
+  for edu in edus[1:]:
+    begin_tok = edu[0]
+    examples.append((begin_tok, 1))
+    examples += [(tok, 0) for tok in edu[1:]]
+  return examples
 
 
 def get_edu_list(parse):
@@ -110,9 +156,9 @@ def get_relation_format(parsed, edus):
             blerp = b[0]
             if blerp == "span":
                 if c[0] == "Nucleus" and d[0] == "Satellite":
-                    relation_name = d[2][1]
+                    relation_name = HORRIBLE_MAP[d[2][1]]
                 elif d[0] == "Nucleus" and c[0] == "Satellite":
-                    relation_name = c[2][1] + "_r"
+                    relation_name = HORRIBLE_MAP[c[2][1]]
                 else:
                     assert d[0] == c[0] == "Nucleus"
                     relation_name = "same_unit"
@@ -132,6 +178,7 @@ def get_relation_format(parsed, edus):
 
 def main():
     file_count = 0
+    segmentation_examples = {'dev':[], 'train':[]}
     for filename in sorted(glob.glob(TRAINING_PATH)):
         with open(filename, "r") as f:
             text = f.read()
@@ -139,16 +186,39 @@ def main():
             if 'List' not in new_text:
               parse = lisp_lib.parse(new_text)
               edus = get_edu_list(parse)
-              with open(f'rst_labeled_{file_count}.json', 'w') as g:
-                json.dump(
-              {
-                "idx": file_count,
-                "original_filename":filename,
-                "segmentation": get_segmentation_format(parse, edus),
-                "relation":get_relation_format(parse, edus)
-              },
-                g)
+              tokens, labels = zip(*get_segmentation_format(parse, edus))
+              if file_count % 10 == 0:
+                subset = 'dev'
+              else:
+                subset = 'train'
+              for i, chunk_start in enumerate(range(0, len(tokens), 200)):
+                if chunk_start == 0:
+                  offset = 0
+                else:
+                  offset = 20
+                segmentation_examples[subset].append(
+                {
+                  f"original_filename_": filename,
+                  "batch": i,
+                  "tokens": tokens[chunk_start:chunk_start+200],
+                  "labels": labels[chunk_start:chunk_start+200],}
+                )
                 file_count += 1
+              #with open(f'relabeled/rst_labeled_{file_count}.json', 'w') as g:
+              #  json.dump(
+              #{
+              #  "idx": file_count,
+              #  "original_filename":filename,
+              #  "segmentation": get_segmentation_format(parse, edus),
+              #  "relation":get_relation_format(parse, edus)
+              #},
+              #  g)
+              #  file_count += 1
+
+    for subset, examples in segmentation_examples.items():
+      with open(f'segmentation_data_{subset}.json', 'w') as f:
+        json.dump({'data':examples},f, indent=4)
+
 
 
 if __name__ == "__main__":
