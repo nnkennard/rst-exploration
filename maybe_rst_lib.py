@@ -1,93 +1,70 @@
 import collections
 import glob
 from rst_parse import Parse
+from annotation_pairs import build_file_map, build_annotation_pair
+from annotation_pairs import TRAIN, DOUBLE
+import yaml
 
 
-TRAIN, TEST, DOUBLE, SINGLE = "train test double single".split()
+Metrics = collections.namedtuple("Metrics", "s_p s_r r_p r_r")
 
-DATA_PATH = "./rst_discourse_treebank/"
+with open('label_classes.yaml', 'r') as f:
+  LABEL_CLASS_MAP = yaml.load(f.read(), Loader=yaml.Loader)
 
+def get_metrics(span_map_1, span_map_2):
 
-def build_paths(data_path):
-    main_path = f"{data_path}/data/RSTtrees-WSJ-main-1.0/"
-    double_path = f"{data_path}/data/RSTtrees-WSJ-double-1.0/"
-    return {
-        TRAIN: f"{main_path}TRAINING/",
-        TEST: f"{main_path}TEST/",
-        DOUBLE: double_path,
-    }
+  num_orig_spans = len(span_map_1)
+  num_final_spans = len(span_map_2)
+  true_positive_spans = set(span_map_1.keys()).intersection(span_map_2.keys())
 
+  true_positive_relation_count = 0
+  for span in true_positive_spans:
+    if LABEL_CLASS_MAP[span_map_1[span]] == LABEL_CLASS_MAP[span_map_2[span]]:
+      true_positive_relation_count += 1
 
-AnnotationPair = collections.namedtuple(
-    "AnnotationPair", "input_text main_annotation double_annotation"
-)
-
-
-def get_file_pair(path, input_file):
-    with open(f"{path}{input_file}", "r") as f:
-        input_text = f.read()
-    with open(f"{path}{input_file}.dis", "r") as f:
-        output_text = f.read()
-    return input_text, output_text
+  return Metrics(
+    s_p=len(true_positive_spans)/num_final_spans,
+    s_r=len(true_positive_spans)/num_orig_spans,
+    r_p=true_positive_relation_count/num_final_spans,
+    r_r=true_positive_relation_count/num_orig_spans)
 
 
-def build_annotation_pair(main_path, double_path, identifier):
-    if identifier.startswith("file"):
-        input_file = identifier
-    else:
-        input_file = f"{identifier}.out"
-    main_in, main_out = get_file_pair(main_path, input_file)
-    double_in, double_out = get_file_pair(double_path, input_file)
-    assert main_in == double_in
-    if None in [main_out, double_out]:
-        return
-    return AnnotationPair(main_in, Parse(main_out), Parse(double_out))
+def f1_score(p, r):
+  if not p+r:
+    return 0
+  return 2* p * r/(p+r)
+
+def mean(l):
+  return sum(l)/len(l)
+
+def main():
+
+  paths, files = build_file_map()
+
+  annotation_pairs = [
+      build_annotation_pair(files, paths, identifier)
+      for identifier in files[TRAIN][DOUBLE]
+  ]
+
+  f1s = {
+    "s": [],
+    "r": [],
+  }
+
+  for x in annotation_pairs:
+      if x is None or not x[3].is_valid or not x[2].is_valid:
+          continue
+      print(x.identifier)
+      main_span_map = x.main_annotation.span_map
+      double_span_map = x.double_annotation.span_map
+      metrics = get_metrics(main_span_map, double_span_map)
+      f1s['s'].append(f1_score(metrics.s_p, metrics.s_r))
+      f1s['r'].append(f1_score(metrics.r_p, metrics.r_r))
+
+  print(mean(f1s['s']))
+  print(mean(f1s['r']))
 
 
-paths = build_paths(DATA_PATH)
 
-temp_file_map = collections.defaultdict(list)
-for subset, path in paths.items():
-    for filename in glob.glob(f"{path}*.out") + glob.glob(f"{path}file?"):
-        identifier = filename.split("/")[-1].split(".")[0]
-        temp_file_map[subset].append(identifier)
-
-files = collections.defaultdict(lambda: collections.defaultdict(list))
-for subset in [TRAIN, TEST]:
-    for filename in temp_file_map[subset]:
-        if filename in temp_file_map[DOUBLE]:
-            files[subset][DOUBLE].append(filename)
-        else:
-            files[subset][SINGLE].append(filename)
-
-annotation_pairs = [
-    build_annotation_pair(paths[TRAIN], paths[DOUBLE], identifier)
-    for identifier in files[TRAIN][DOUBLE]
-]
-
-for x in annotation_pairs:
-    if x is None or not x[1].is_valid or not x[2].is_valid:
-        continue
-    main_span_map = x.main_annotation.span_map
-    double_span_map = x.double_annotation.span_map
-
-span_labels = collections.Counter()
-for filename in glob.glob("rst_discourse_treebank/data/RSTtrees-WSJ-*-1.0/*/*.dis"):
-    if (
-        "1189" in filename
-        or "1322" in filename
-        or "1318" in filename
-        or "1355" in filename
-        or "1362" in filename
-        or "1138" in filename
-        or "1192" in filename
-        or "0681" in filename
-        or "1377" in filename
-        or "1170" in filename
-    ):
-        continue
-    with open(filename, "r") as f:
-        parse = Parse(f.read())
-        if parse.is_valid:
-            for k, v in parse.span_map.items():
-                span_labels[v] += 1
+if __name__ == "__main__":
+  main()

@@ -1,6 +1,7 @@
 import json
 import lisp_lib
 
+
 def bracket_conversion(parse_text):
     if "TT_ERR" in parse_text:
         return None
@@ -148,6 +149,3 @@ class Subtree(object):
         if not self.is_leaf:
             self.first_edu = min(edus)
             self.last_edu = max(edus)
-
-
-
