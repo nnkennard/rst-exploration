@@ -151,6 +151,12 @@ class Subtree(object):
         if not self.is_leaf:
             self.first_edu = min(edus)
             self.last_edu = max(edus)
+        else:
+            self.first_edu = self.last_edu = self.tags["span_leaf"]
+
+    def children_in_order(self):
+        return list(sorted(self.nuclei + self.satellites, key=lambda x: x.first_edu))
+
 
 AnnotationPair = collections.namedtuple(
     "AnnotationPair", "identifier input_text main_annotation double_annotation"

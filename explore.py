@@ -96,7 +96,7 @@ def main():
       #print(x.identifier)
       main_span_map = x.main_annotation.span_map
       double_span_map = x.double_annotation.span_map
-      print(len(main_span_map), len(double_span_map))
+      #print(len(main_span_map), len(double_span_map))
 
       #match_map =get_span_match_map(main_span_map, double_span_map)
 
@@ -104,14 +104,14 @@ def main():
       #print(x.identifier, f1_score(metrics.s_p, metrics.s_r))
       #f1s['s'].append(f1_score(metrics.s_p, metrics.s_r))
       #f1s['r'].append(f1_score(metrics.r_p, metrics.r_r))
-      #flips += get_flips(main_span_map, double_span_map)
+      flips += get_flips(main_span_map, double_span_map)
 
 
-  #c = collections.Counter(flips)
-  #for k, v in c.most_common():
-  #  print(k, v)
-  print(mean(f1s['s']))
-  print(mean(f1s['r']))
+  c = collections.Counter(flips)
+  for k, v in c.most_common():
+    print(k, v)
+  #print(mean(f1s['s']))
+  #print(mean(f1s['r']))
 
 
 
