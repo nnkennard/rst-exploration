@@ -3,6 +3,20 @@ import lisp_lib
 import collections
 import glob
 
+# ========== Utils and constants ==================================================
+
+AnnotationPair = collections.namedtuple(
+    "AnnotationPair", "identifier input_text main_annotation double_annotation"
+)
+
+
+TRAIN, TEST, DOUBLE, SINGLE = "train test double single".split()
+
+DATA_PATH = "./rst_discourse_treebank/"
+
+
+# ========== RST-DT file helpers ==================================================
+# These are functions that deal with the particulars of RST-DT's format
 
 def bracket_conversion(parse_text):
     if "TT_ERR" in parse_text:
@@ -22,149 +36,35 @@ def bracket_conversion(parse_text):
     return new_text
 
 
-def is_tag(parse):
-    return all(type(x) in [str, float, int] for x in parse)
-
-
 def read_tag(parse):
     if parse[0] == "span":
         return {"span": tuple(int(x) for x in parse[1:])}
     elif parse[0] == "text":
-        return {"text": parse[1:]}
+        assert parse[1].startswith("_!") and parse[-1].endswith("_!")
+        tokens = [str(i) for i in parse[1:]]
+        tokens[0] = tokens[0][2:]
+        tokens[-1] = tokens[-1][:-2]
+        return {"text": " ".join(tokens), "tokens": tokens}
     elif parse[0] == "leaf":
         return {"leaf": int(parse[1])}
     else:
         assert parse[0] == "rel2par"
         return {parse[0]: parse[1]}
+    
+
+def is_tag(parse):
+    return all(type(x) in [str, float, int] for x in parse)
 
 
-def get_edu_list(parse):
-    edus = [None]
+def get_tags(parse):
+    tags = {}
+    for maybe_tag in parse:
+        if is_tag(maybe_tag):
+            tags.update(read_tag(maybe_tag))
+    return tags
 
-    def inorder_walk(tree):
-        current_edu = []
-        for i, x in enumerate(tree):
-            if type(x) in [int, float, str]:
-                if tree[0] == "text" and i > 0:
-                    str_x = str(x)
-                    p = str_x.replace("_!", "")
-                    if str_x.startswith("_!"):
-                        current_edu.append(p)
-                    else:
-                        current_edu.append(p)
-                    if str_x.endswith("_!"):
-                        edus.append(current_edu)
-                        current_edu = []
-            else:
-                inorder_walk(x)
-
-    inorder_walk(parse)
-    return edus
-
-
-def get_span_map(tree):
-    span_map = {}
-
-    def span_walk(tree):
-        if tree is None or tree.is_leaf:
-            return
-        if len(tree.satellites) > 1:
-            # Multiple satellites in:
-            #   TRAINING/wsj_1322 in (129, 144)
-            #   TRAINING/wsj_0681 in (110, 115)
-            #   TRAINING/wsj_1377 in (116, 157)
-            #   TRAINING/wsj_1170 in (4, 18)
-            #   TRAINING/wsj_1192 in (73, 75)
-            #   TRAINING/wsj_1138 in (32, 37)
-            #   TRAINING/wsj_1355 in (1, 5)
-            #   TRAINING/wsj_1362 in (12, 14)
-            #   TRAINING/wsj_1318 in (15 25
-            return
-        elif len(tree.nuclei) == 1:
-            (nucleus,) = tree.nuclei
-            (satellite,) = tree.satellites
-            assert nucleus.tags["rel2par"] == "span"
-            span_map[(tree.first_edu, tree.last_edu)] = satellite.tags["rel2par"]
-        else:
-            assert not tree.satellites
-            rel2pars = set()
-            spans = []
-            for c in tree.nuclei:
-                rel2pars.add(c.tags["rel2par"])
-                spans.append(c.tags["span_leaf"])
-            rel2pars -= set(
-                ["span"]
-            )  # TEST/1189.out.dis has a multinuclear rel where one rel2par is span
-            assert len(rel2pars) == 1
-            (rel2par,) = sorted(rel2pars)
-            span_map[(tree.first_edu, tree.last_edu)] = rel2par
-
-        for s in tree.nuclei + tree.satellites:
-            span_walk(s)
-
-    span_walk(tree)
-    return span_map
-
-
-class Parse(object):
-    def __init__(self, parse_text):
-        temp = bracket_conversion(parse_text)
-        if temp is None:
-            self.is_valid = False
-            return
-        else:
-            self.is_valid = True
-        parse = lisp_lib.parse(temp)
-        self.tree = Subtree(parse)
-        self.edus = get_edu_list(parse)
-        self.span_map = get_span_map(self.tree)
-
-
-class Subtree(object):
-    def __init__(self, parse):
-        self.tree_text = json.dumps(parse)
-        label = parse[0]
-        self.tags = {"is_root": label == "Root"}
-
-        children = {"Nucleus": [], "Satellite": []}
-
-        for child in parse[1:]:
-            if is_tag(child):
-                self.tags.update(read_tag(child))
-            else:
-                children[child[0]].append(Subtree(child))
-
-        self.nuclei = children["Nucleus"]
-        self.satellites = children[
-            "Satellite"
-        ]  # For some reason one tree has two satellites
-        self.tags["span_leaf"] = self.tags.get("span", self.tags.get("leaf"))
-        self.is_leaf = "leaf" in self.tags
-
-        edus = set()
-        for k in self.nuclei + self.satellites:
-            if "span" in k.tags:
-                edus.update(k.tags["span"])
-            else:
-                edus.add(k.tags["leaf"])
-
-        if not self.is_leaf:
-            self.first_edu = min(edus)
-            self.last_edu = max(edus)
-        else:
-            self.first_edu = self.last_edu = self.tags["span_leaf"]
-
-    def children_in_order(self):
-        return list(sorted(self.nuclei + self.satellites, key=lambda x: x.first_edu))
-
-
-AnnotationPair = collections.namedtuple(
-    "AnnotationPair", "identifier input_text main_annotation double_annotation"
-)
-
-TRAIN, TEST, DOUBLE, SINGLE = "train test double single".split()
-
-DATA_PATH = "./rst_discourse_treebank/"
+# ========== RST-DT directory helpers ==================================================
+# These are functions that deal with the particulars of RST-DT's directory structure
 
 
 def get_file_pair(path, input_file):
@@ -173,20 +73,6 @@ def get_file_pair(path, input_file):
     with open(f"{path}{input_file}.dis", "r") as f:
         output_text = f.read()
     return input_text, output_text
-
-
-def build_annotation_pair(files, paths, identifier):
-    if identifier.startswith("file"):
-        input_file = identifier
-    else:
-        input_file = f"{identifier}.out"
-    main_in, main_out = get_file_pair(paths[TRAIN], input_file)
-    double_in, double_out = get_file_pair(paths[DOUBLE], input_file)
-    assert main_in == double_in
-    if None in [main_out, double_out]:
-        return
-    return AnnotationPair(identifier, main_in, Parse(main_out), Parse(double_out))
-
 
 def build_file_map(data_path=DATA_PATH):
     main_path = f"{data_path}/data/RSTtrees-WSJ-main-1.0/"
@@ -211,3 +97,101 @@ def build_file_map(data_path=DATA_PATH):
                 files[subset][SINGLE].append(filename)
 
     return paths, files
+
+def build_annotation_pair(files, paths, identifier):
+    if identifier.startswith("file"):
+        input_file = identifier
+    else:
+        input_file = f"{identifier}.out"
+    main_in, main_out = get_file_pair(paths[TRAIN], input_file)
+    double_in, double_out = get_file_pair(paths[DOUBLE], input_file)
+    assert main_in == double_in
+    if None in [main_out, double_out]:
+        return
+    return AnnotationPair(identifier, main_in, Parse(main_out), Parse(double_out))
+
+
+# =========== Objects for parse representation =============================
+
+class Subtree(object):
+    def __init__(self, parse):
+        self.tags = get_tags(parse[1:])
+        self.node_type = parse[0][0]
+        children = [subtree for subtree in parse if not is_tag(subtree)]
+
+        # Build a right-branching binary tree
+        if children:
+            self.is_leaf = False
+            self.left_child = Subtree(children[0])
+            if len(children) == 2:
+                self.right_child = Subtree(children[1])
+            else:
+                assert len(children) > 2
+                self.right_child = Subtree(["Nucleus"] + children[1:])
+            self.direction = f"{self.left_child.node_type}{self.right_child.node_type}"
+            if self.direction == "NS":
+                self.relation = self.right_child.tags["rel2par"]
+            else:
+                self.relation = self.left_child.tags["rel2par"]
+
+        else:
+            self.is_leaf = True
+            assert "text" in self.tags
+
+
+class Parse(object):
+    def __init__(self, parse_text):
+        self.complete = False
+        maybe_converted = bracket_conversion(parse_text)
+        self.is_valid = maybe_converted is not None
+        if self.is_valid:
+            parse = lisp_lib.parse(maybe_converted)
+            self.tree = Subtree(parse)
+            self._assign_span_indices()
+            self.edus = self._read_in_order()
+            self.complete = True
+
+    def _read_in_order(self):
+        edus = []
+
+        def inorder_helper(tree):
+            if "tokens" in tree.tags:
+                edus.append(tree.tags["tokens"])
+            else:
+                inorder_helper(tree.left_child)
+                inorder_helper(tree.right_child)
+
+        inorder_helper(self.tree)
+        return [None] + edus
+
+    def _assign_span_indices(self):
+        token_index = [0]  # This is a terrible solution
+
+        def assign_span_helper(subtree):
+            if subtree.is_leaf:
+                subtree.start_token = token_index[0]
+                subtree.end_token = token_index[0] + len(subtree.tags["tokens"])
+                token_index[0] += len(subtree.tags["tokens"])
+            else:
+                assign_span_helper(subtree.left_child)
+                subtree.start_token = subtree.left_child.start_token
+                assign_span_helper(subtree.right_child)
+                subtree.end_token = subtree.right_child.end_token
+
+        assign_span_helper(self.tree)
+
+    def get_span_map(self, edus=None):
+        span_map = {}
+
+        def get_span_helper(subtree):
+            if not subtree.is_leaf:
+                span_map[(subtree.start_token, subtree.end_token)] = (subtree.direction, subtree.relation)
+                get_span_helper(subtree.left_child)
+                get_span_helper(subtree.right_child)
+            else:
+                span_map[(subtree.start_token, subtree.end_token)] = (None, None)
+
+        get_span_helper(self.tree)
+        if edus is not None:
+            print(sorted(set(edus) - set(span_map.keys())))
+        return span_map
