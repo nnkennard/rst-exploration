@@ -5,10 +5,9 @@ import glob
 # ========== Utils and constants ==================================================
 
 TRAIN, TEST, DOUBLE, SINGLE = "train test double single".split()
-DATA_PATH = "./rst_discourse_treebank/"
-
 
 # ========== Lisp parsing =========================================================
+
 
 def parse(program):
     "Read a Scheme expression from a string."
@@ -31,6 +30,7 @@ def read_from_tokens(tokens):
         raise SyntaxError("unexpected )")
     else:
         return token
+
 
 # ========== RST-DT file helpers ==================================================
 # These are functions that deal with the particulars of RST-DT's format
@@ -94,7 +94,7 @@ def get_file_pair(path, input_file):
     return input_text, output_text
 
 
-def build_file_map(data_path=DATA_PATH):
+def build_file_map(data_path):
     main_path = f"{data_path}/data/RSTtrees-WSJ-main-1.0/"
     double_path = f"{data_path}/data/RSTtrees-WSJ-double-1.0/"
     paths = {
@@ -255,6 +255,36 @@ class AnnotationPair(object):
         f1_scores["S"] = f
 
         return f1_scores
+
+
+# =========== Code for handling paired annotations ========================
+
+
+def build_annotation_pair(files, paths, identifier):
+    if identifier.startswith("file"):
+        input_file = identifier
+    else:
+        input_file = f"{identifier}.out"
+    main_in, main_out = get_file_pair(paths[TRAIN], input_file)
+    double_in, double_out = get_file_pair(paths[DOUBLE], input_file)
+    assert main_in == double_in
+    if None in [main_out, double_out]:
+        return
+    return AnnotationPair(
+        identifier, main_in, Parse(main_out), Parse(double_out)
+    )
+
+
+def get_double_annotated_train_files(data_path, valid_only=False):
+    paths, files = build_file_map(data_path)
+    pairs = [
+        build_annotation_pair(files, paths, identifier)
+        for identifier in files[TRAIN][DOUBLE]
+    ]
+    if valid_only:
+        return [pair for pair in pairs if pair.is_valid]
+    else:
+        return pairs
 
 
 # =========== Wrappers for tree visualization =============================
