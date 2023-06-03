@@ -1,14 +1,36 @@
 import json
-import lisp_lib
 import collections
 import glob
 
 # ========== Utils and constants ==================================================
 
 TRAIN, TEST, DOUBLE, SINGLE = "train test double single".split()
-
 DATA_PATH = "./rst_discourse_treebank/"
 
+
+# ========== Lisp parsing =========================================================
+
+def parse(program):
+    "Read a Scheme expression from a string."
+    tokenized = program.replace("(", " ( ").replace(")", " ) ").split()
+    return read_from_tokens(tokenized)
+
+
+def read_from_tokens(tokens):
+    "Read an expression from a sequence of tokens."
+    if len(tokens) == 0:
+        raise SyntaxError("unexpected EOF")
+    token = tokens.pop(0)
+    if token == "(":
+        L = []
+        while tokens[0] != ")":
+            L.append(read_from_tokens(tokens))
+        tokens.pop(0)  # pop off ')'
+        return L
+    elif token == ")":
+        raise SyntaxError("unexpected )")
+    else:
+        return token
 
 # ========== RST-DT file helpers ==================================================
 # These are functions that deal with the particulars of RST-DT's format
@@ -132,8 +154,8 @@ class Parse(object):
         maybe_converted = bracket_conversion(parse_text)
         self.is_valid = maybe_converted is not None
         if self.is_valid:
-            parse = lisp_lib.parse(maybe_converted)
-            self.tree = Subtree(parse)
+            parsed = parse(maybe_converted)
+            self.tree = Subtree(parsed)
             self._assign_span_indices()
             self.edus = self._read_in_order()
             self.complete = True
