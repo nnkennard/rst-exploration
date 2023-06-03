@@ -18,6 +18,7 @@ DATA_PATH = "./rst_discourse_treebank/"
 # ========== RST-DT file helpers ==================================================
 # These are functions that deal with the particulars of RST-DT's format
 
+
 def bracket_conversion(parse_text):
     if "TT_ERR" in parse_text:
         return None
@@ -50,7 +51,7 @@ def read_tag(parse):
     else:
         assert parse[0] == "rel2par"
         return {parse[0]: parse[1]}
-    
+
 
 def is_tag(parse):
     return all(type(x) in [str, float, int] for x in parse)
@@ -63,6 +64,7 @@ def get_tags(parse):
             tags.update(read_tag(maybe_tag))
     return tags
 
+
 # ========== RST-DT directory helpers ==================================================
 # These are functions that deal with the particulars of RST-DT's directory structure
 
@@ -73,6 +75,7 @@ def get_file_pair(path, input_file):
     with open(f"{path}{input_file}.dis", "r") as f:
         output_text = f.read()
     return input_text, output_text
+
 
 def build_file_map(data_path=DATA_PATH):
     main_path = f"{data_path}/data/RSTtrees-WSJ-main-1.0/"
@@ -98,6 +101,7 @@ def build_file_map(data_path=DATA_PATH):
 
     return paths, files
 
+
 def build_annotation_pair(files, paths, identifier):
     if identifier.startswith("file"):
         input_file = identifier
@@ -112,6 +116,7 @@ def build_annotation_pair(files, paths, identifier):
 
 
 # =========== Objects for parse representation =============================
+
 
 class Subtree(object):
     def __init__(self, parse):
@@ -185,13 +190,17 @@ class Parse(object):
 
         def get_span_helper(subtree):
             if not subtree.is_leaf:
-                span_map[(subtree.start_token, subtree.end_token)] = (subtree.direction, subtree.relation)
+                span_map[(subtree.start_token, subtree.end_token)] = (
+                    subtree.direction,
+                    subtree.relation,
+                )
                 get_span_helper(subtree.left_child)
                 get_span_helper(subtree.right_child)
             else:
-                span_map[(subtree.start_token, subtree.end_token)] = (None, None)
+                span_map[(subtree.start_token, subtree.end_token)] = ("Leaf", subtree.tags['text'])
 
         get_span_helper(self.tree)
         if edus is not None:
-            print(sorted(set(edus) - set(span_map.keys())))
+            for additional_span in set(edus) - set(span_map.keys()):
+                span_map[additional_span] = ("SegDiff", None)
         return span_map
