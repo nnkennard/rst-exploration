@@ -1,2 +1,7 @@
 .DS_Store
 .ipynb_checkpoints/
+__pycache__/
+
+binary_parses/
+nary_parses/
+rst_discourse_treebank/
