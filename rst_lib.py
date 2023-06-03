@@ -5,11 +5,6 @@ import glob
 
 # ========== Utils and constants ==================================================
 
-AnnotationPair = collections.namedtuple(
-    "AnnotationPair", "identifier input_text main_annotation double_annotation"
-)
-
-
 TRAIN, TEST, DOUBLE, SINGLE = "train test double single".split()
 
 DATA_PATH = "./rst_discourse_treebank/"
@@ -102,19 +97,6 @@ def build_file_map(data_path=DATA_PATH):
     return paths, files
 
 
-def build_annotation_pair(files, paths, identifier):
-    if identifier.startswith("file"):
-        input_file = identifier
-    else:
-        input_file = f"{identifier}.out"
-    main_in, main_out = get_file_pair(paths[TRAIN], input_file)
-    double_in, double_out = get_file_pair(paths[DOUBLE], input_file)
-    assert main_in == double_in
-    if None in [main_out, double_out]:
-        return
-    return AnnotationPair(identifier, main_in, Parse(main_out), Parse(double_out))
-
-
 # =========== Objects for parse representation =============================
 
 
@@ -197,10 +179,85 @@ class Parse(object):
                 get_span_helper(subtree.left_child)
                 get_span_helper(subtree.right_child)
             else:
-                span_map[(subtree.start_token, subtree.end_token)] = ("Leaf", subtree.tags['text'])
+                span_map[(subtree.start_token, subtree.end_token)] = (
+                    "Leaf",
+                    subtree.tags["text"],
+                )
 
         get_span_helper(self.tree)
         if edus is not None:
             for additional_span in set(edus) - set(span_map.keys()):
                 span_map[additional_span] = ("SegDiff", None)
         return span_map
+
+    def render(self, path):
+        ete_render(self, path)
+
+
+class AnnotationPair(object):
+    def __init__(self, identifier, input_text, main_annotation, double_annotation):
+        self.identifier = identifier
+        self.input_text = input_text
+        self.main_annotation = main_annotation
+        self.double_annotation = double_annotation
+        self.is_valid = (
+            self.main_annotation.is_valid and self.double_annotation.is_valid
+        )
+        if self.is_valid:
+            self.final_edus = self._get_final_edus()
+            self.final_span_map = {
+                "main": self.main_annotation.get_span_map(self.final_edus),
+                "double": self.double_annotation.get_span_map(self.final_edus),
+            }
+            self.agreement_scores = self._calculate_agreement_scores()
+
+    def _get_final_edus(self):
+        final_edu_ends = sorted(
+            set(
+                end
+                for _, end in set(self.main_annotation.get_span_map().keys()).union(
+                    self.double_annotation.get_span_map().keys()
+                )
+            )
+        )
+        final_edu_starts = [0] + final_edu_ends[:-1]
+        return list(zip(final_edu_starts, final_edu_ends))
+
+    def _calculate_agreement_scores(self):
+        f1_scores = {}
+        set1 = set(self.final_span_map["main"].keys())
+        set2 = set(self.final_span_map["double"].keys())
+        p = len(set1.intersection(set2)) / len(set1)
+        r = len(set1.intersection(set2)) / len(set2)
+        f = 2 * p * r / (p + r)
+        f1_scores["S"] = f
+
+        return f1_scores
+
+
+# =========== Wrappers for tree visualization =============================
+
+from ete3 import NodeStyle, TextFace, Tree, TreeStyle
+import PyQt5
+
+ts = TreeStyle()
+ts.show_leaf_name = False
+ns = NodeStyle()
+ns["size"] = 0
+
+
+def get_newick_helper(subtree):
+    if "text" in subtree.tags:
+        return str(subtree.tags["leaf"])
+    else:
+        return f"({get_newick_helper(subtree.left_child)}, {get_newick_helper(subtree.right_child)})"
+
+
+def ete_render(annotation, filename):
+    t = Tree(get_newick_helper(annotation.tree) + ";")
+    for x in t.traverse():
+        x.set_style(ns)
+        if x.name:
+            x.add_face(TextFace(f" " + " ".join(annotation.edus[int(x.name)])), 0)
+    t.convert_to_ultrametric()
+    t.render(filename, tree_style=ts, w=400, dpi=150)
