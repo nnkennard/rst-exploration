@@ -157,6 +157,7 @@ class Parse(object):
             parsed = parse(maybe_converted)
             self.tree = Subtree(parsed)
             self._assign_span_indices()
+            self._assign_span_heights()
             self.edus = self._read_in_order()
             self.complete = True
 
@@ -172,32 +173,50 @@ class Parse(object):
 
         inorder_helper(self.tree)
         return [None] + edus
+    
+    
+    def _assign_span_heights(self):
+        
+        def _assign_height_helper(subtree, parent_depth):
+            
+            subtree.depth_from_root = parent_depth + 1
+            if subtree.is_leaf:
+                subtree.height_from_leaf = 0
+            else:
+                _assign_height_helper(subtree.left_child, subtree.depth_from_root)
+                _assign_height_helper(subtree.right_child, subtree.depth_from_root)
+                subtree.height_from_leaf = max(subtree.left_child.height_from_leaf, subtree.right_child.height_from_leaf) + 1
+           
+        _assign_height_helper(self.tree, 0)
+                
 
     def _assign_span_indices(self):
         token_index = [0]  # This is a terrible solution
 
-        def assign_span_helper(subtree):
+        def _assign_indices_helper(subtree):
             if subtree.is_leaf:
                 subtree.start_token = token_index[0]
                 subtree.end_token = token_index[0] + len(subtree.tags["tokens"])
                 token_index[0] += len(subtree.tags["tokens"])
             else:
-                assign_span_helper(subtree.left_child)
+                _assign_indices_helper(subtree.left_child)
                 subtree.start_token = subtree.left_child.start_token
-                assign_span_helper(subtree.right_child)
+                _assign_indices_helper(subtree.right_child)
                 subtree.end_token = subtree.right_child.end_token
 
-        assign_span_helper(self.tree)
+        _assign_indices_helper(self.tree)
 
     def get_span_map(self, edus=None):
         span_map = {}
 
         def get_span_helper(subtree):
             if not subtree.is_leaf:
-                span_map[(subtree.start_token, subtree.end_token)] = (
-                    subtree.direction,
-                    subtree.relation,
-                )
+                span_map[(subtree.start_token, subtree.end_token)] = {
+                    "direction": subtree.direction,
+                    "relation": subtree.relation,
+                    "height": subtree.height_from_leaf,
+                    "depth": subtree.depth_from_root
+                }
                 get_span_helper(subtree.left_child)
                 get_span_helper(subtree.right_child)
             else:
@@ -217,7 +236,7 @@ class Parse(object):
 
 
 class AnnotationPair(object):
-    def __init__(self, identifier, input_text, main_annotation, double_annotation):
+    def __init__(self, identifier, input_text, main_annotation, double_annotation, main_is_main):
         self.identifier = identifier
         self.input_text = input_text
         self.main_annotation = main_annotation
@@ -245,17 +264,49 @@ class AnnotationPair(object):
         final_edu_starts = [0] + final_edu_ends[:-1]
         return list(zip(final_edu_starts, final_edu_ends))
 
+    # {'direction': 'NS', 'relation': 'elaboration-object-attribute-e', 'height': 0, 'depth': 5}
+    # {'direction': 'NS', 'relation': 'elaboration-object-attribute-e', 'height': 0, 'depth': 5}
+
     def _calculate_agreement_scores(self):
         f1_scores = {}
+        
         set1 = set(self.final_span_map["main"].keys())
         set2 = set(self.final_span_map["double"].keys())
         p = len(set1.intersection(set2)) / len(set1)
         r = len(set1.intersection(set2)) / len(set2)
         f = 2 * p * r / (p + r)
+        
+        jk = len(set1) + len(set2)
         f1_scores["S"] = f
-
+        
+        matched_spans = set1.intersection(set2)
+        correct_spans = {
+            "N":set(),
+            "R":set(),
+            "F":set(),
+        }
+        for span in matched_spans:
+            
+            rel1 = self.final_span_map['main'][span]
+            rel2 = self.final_span_map['double'][span]
+            if type(rel1) == tuple or type(rel2) == tuple:
+                continue
+            
+            nuc_match = rel1['direction'] == rel2['direction']
+            rel_match = rel1['relation'] == rel2['relation']
+            
+            if nuc_match and rel_match:
+                correct_spans["F"].add(span)
+            if nuc_match:
+                correct_spans["N"].add(span)
+            if rel_match:
+                correct_spans["R"].add(span)
+           
+        for k,v in correct_spans.items():
+            f1_scores[k] = 2*len(v)/jk
+            
         return f1_scores
-
+                
 
 # =========== Code for handling paired annotations ========================
 
@@ -270,17 +321,20 @@ def build_annotation_pair(files, paths, identifier):
     assert main_in == double_in
     if None in [main_out, double_out]:
         return
-    return AnnotationPair(
-        identifier, main_in, Parse(main_out), Parse(double_out)
+    return [AnnotationPair(
+        identifier, main_in, Parse(main_out), Parse(double_out), True
+    ),AnnotationPair(
+        f'{identifier}_r', main_in, Parse(double_out), Parse(main_out), False
     )
+           ]
 
 
 def get_double_annotated_train_files(data_path, valid_only=False):
     paths, files = build_file_map(data_path)
-    pairs = [
+    pairs = sum([
         build_annotation_pair(files, paths, identifier)
         for identifier in files[TRAIN][DOUBLE]
-    ]
+    ], [])
     if valid_only:
         return [pair for pair in pairs if pair.is_valid]
     else:
