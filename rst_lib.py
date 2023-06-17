@@ -77,11 +77,36 @@ def get_tags(parse):
             tags.update(read_tag(maybe_tag))
     return tags
 
+def get_boundaries(text):
+    index = 0
+    paragraph_map = []
+    sentence_map = []
+    
+    paragraphs = text.split("\n\n")
+    sentence_start_index = 0
+    for paragraph in paragraphs:
+        paragraph_start = index
+        sentences = paragraph.split("\n")
+        for sentence in sentences:
+            tokens = sentence.split()
+            exclusive_end = index + len(tokens)
+            sentence_map.append((index, exclusive_end))
+            index = exclusive_end
+        paragraph_map.append((paragraph_start, index))
+    
+    return {
+        "paragraph": paragraph_map,
+        "sentence": sentence_map
+    }
+    
+    
+
 
 # ========== RST-DT directory helpers ==================================================
 # These are functions that deal with the particulars of RST-DT's directory structure
 
 TRAIN, TEST, DOUBLE, SINGLE = "train test double single".split()
+
 
 def get_file_pair(path, input_file):
     with open(f"{path}{input_file}", "r") as f:
@@ -118,98 +143,101 @@ def build_file_map(data_path):
 
 def get_double_annotated_train_files(data_path, valid_only=False):
     paths, files = build_file_map(data_path)
-    pairs = sum([
-        build_annotation_pair(files, paths, identifier)
-        for identifier in files[TRAIN][DOUBLE]
-    ], [])
+    pairs = sum(
+        [
+            build_annotation_pair(files, paths, identifier)
+            for identifier in files[TRAIN][DOUBLE]
+        ],
+        [],
+    )
     if valid_only:
         return [pair for pair in pairs if pair.is_valid]
     else:
         return pairs
 
+
 # =========== Objects for parse representation =============================
 
+# Levels
+
+INTRA_SENT, INTRA_PARA, INTER_PARA = "intra_sent intra_para inter_para".split()
+
+
 class Subtree(object):
-    
-    def __init__(self, parse, is_weird_binary=False):
-        self.is_weird_binary = is_weird_binary
-        self._apply_tags(parse[1:])     
-            
+    def __init__(self, parse, binarizing=False):
+        self._apply_tags(parse[1:])
+
         self.nuclearity_contrib = parse[0][0]
-        if not self.nuclearity_contrib in "NSR":
-            print(parse[0])
-            dsds
-        
+        assert self.nuclearity_contrib in "NSR"
+
         # Build children
         children = [subtree for subtree in parse if not is_tag(subtree)]
-        if children:
-            self.is_leaf = False
+        self.is_leaf = len(children) == 0
+
+        if not self.is_leaf:
+
+            # Build tree
             self.left_child = Subtree(children[0])
-            if len(children) == 2: 
+            if len(children) == 2:
                 self.right_child = Subtree(children[1])
-            else: # If n-ary, build a right-branching binary tree
-                assert len(children) > 2 
-                #print(self.left_child.nuclearity_contrib)
-                #assert self.left_child.nuclearity_contrib == "N"
-                self.right_child = Subtree(["Nucleus", ["rel2par", 'span']] + children[1:], is_weird_binary=True)
-                
+            else:
+                # If n-ary, build a right-branching binary tree
+                self.right_child = Subtree(
+                    ["Nucleus", ["rel2par", "span"]] + children[1:], binarizing=True
+                )
+
             # Assign nuclearity
-            self.nuclearity = f'{self.left_child.nuclearity_contrib}{self.right_child.nuclearity_contrib}'
-            assert self.nuclearity in ['NN', "NS", "SN"]
-            if is_weird_binary:
-                assert self.nuclearity == "NN"
-                
+            if binarizing:
+                self.nuclearity = "NN"  # Override: sometimes there is a S in a multinuclear relation (??)
+            else:
+                self.nuclearity = f"{self.left_child.nuclearity_contrib}{self.right_child.nuclearity_contrib}"
+
             # Assign relation
             self.relation = self.determine_relation()
-        else:
-            self.is_leaf = True
-            
-            
+
     def _apply_tags(self, parse):
         for maybe_tag in parse:
             if not is_tag(maybe_tag):
                 continue
             if maybe_tag[0] == "span":
-#                 self.edu_span = tuple(int(x) for x in maybe_tag[1:])
-                # Add this on the upward pass instead, so that we can automatically account for the binarization
-                self.is_leaf = False
+                continue  # We assign spans after binarization
             elif maybe_tag[0] == "leaf":
-                leaf_edu = int(maybe_tag[1])
-                self.edu_span = (leaf_edu, leaf_edu)
-                self.is_leaf = True
+                self.start_edu = self.inc_end_edu = int(maybe_tag[1])
             elif maybe_tag[0] == "text":
                 assert maybe_tag[1].startswith("_!") and maybe_tag[-1].endswith("_!")
                 self.tokens = [str(i).replace("_!", "") for i in maybe_tag[1:]]
             else:
                 assert maybe_tag[0] == "rel2par"
                 self.rel2par = maybe_tag[1]
-                
+
     def determine_relation(self):
         l = self.left_child.rel2par
         r = self.right_child.rel2par
-        assert not l == r == 'span'
-        if not l == 'span' and not r == 'span':
+        assert not l == r == "span"
+        if not l == "span" and not r == "span":
             assert l == r
             return l
-        elif l == 'span':
+        elif l == "span":
             return r
         else:
             return l
 
+
 class Parse(object):
-    def __init__(self, parse_text):
+    def __init__(self, parse_text, boundaries):
         self.complete = False
         maybe_converted = bracket_conversion(parse_text)
         self.is_valid = maybe_converted is not None
         if self.is_valid:
+            self.boundaries = boundaries
             parsed = parse(maybe_converted)
             self.tree = Subtree(parsed)
+            self.edus, self.edu_indices = self._read_in_order()
             self._assign_span_indices()
-            self.edus = self._read_in_order()
             self.complete = True
 
     def _read_in_order(self):
-        edus = []
+        edus = [None] # No EDU 0
 
         def inorder_helper(tree):
             if tree.is_leaf:
@@ -219,27 +247,57 @@ class Parse(object):
                 inorder_helper(tree.right_child)
 
         inorder_helper(self.tree)
-        return [None] + edus
-    
-                
+        
+        index = 0
+        edu_indices = [None] # No EDU 0
+        
+        for edu in edus[1:]:
+            next_index = index + len(edu)
+            edu_indices.append((index, next_index))
+            index = next_index
+        
+        return edus, edu_indices
 
     def _assign_span_indices(self):
-        token_index = [0]  # This is a terrible solution
 
         def _assign_indices_helper(subtree):
-            print(subtree.is_weird_binary)
-            if subtree.is_weird_binary or not subtree.is_leaf:
+            # if subtree.is_weird_binary or not subtree.is_leaf:
+            if not subtree.is_leaf:
                 _assign_indices_helper(subtree.left_child)
-                subtree.start_token = subtree.left_child.start_token
+                subtree.start_edu = subtree.left_child.start_edu
+                
                 _assign_indices_helper(subtree.right_child)
-                subtree.end_token = subtree.right_child.end_token
+                subtree.inc_end_edu = subtree.right_child.inc_end_edu
+            subtree.start_token, subtree.end_token, subtree.level = self._get_token_boundaries(subtree.start_edu, subtree.inc_end_edu)
 
-            else:     
-                subtree.start_token = token_index[0]
-                subtree.end_token = token_index[0] + len(subtree.tokens)
-                token_index[0] += len(subtree.tokens)
-
+                
         _assign_indices_helper(self.tree)
+        
+    def _get_token_boundaries(self, start_edu, inc_end_edu):
+        start_token = self.edu_indices[start_edu][0]
+        end_token = self.edu_indices[inc_end_edu][1]
+        level = None
+        
+        same_para_found = False
+        for paragraph_start, paragraph_end in self.boundaries['paragraph']:
+            if start_token >= paragraph_start: # Start token is in this paragraph
+                if end_token <= paragraph_end: # They are in the same paragraph; check for same sentence
+                    
+                    same_para_found = True
+                    same_sentence_found = False
+                    for sentence_start, sentence_end in self.boundaries['sentence']:
+                        if start_token >= sentence_start:
+                            if end_token <= sentence_end:
+                                level = INTRA_SENT
+                                same_sentence_found = True
+                                
+                    if not same_sentence_found:
+                        level = INTRA_PARA
+                    
+        if not same_para_found:
+            level = INTER_PARA
+        
+        return start_token, end_token, level
 
     def get_span_map(self, edus=None):
         span_map = {}
@@ -249,8 +307,9 @@ class Parse(object):
                 span_map[(subtree.start_token, subtree.end_token)] = {
                     "nuclearity": subtree.nuclearity,
                     "relation": subtree.relation,
-#                     "height": subtree.span.height_from_leaf,
-#                     "depth": subtree.span.depth_from_root
+                    "level": subtree.level,
+                    #                     "height": subtree.span.height_from_leaf,
+                    #                     "depth": subtree.span.depth_from_root
                 }
                 get_span_helper(subtree.left_child)
                 get_span_helper(subtree.right_child)
@@ -261,11 +320,11 @@ class Parse(object):
                 )
 
         get_span_helper(self.tree)
-        
+
         if edus is not None:
             for additional_span in set(edus) - set(span_map.keys()):
                 span_map[additional_span] = ("SegDiff", None)
-        
+
         return span_map
 
     def render(self, path):
@@ -273,8 +332,14 @@ class Parse(object):
 
 
 class AnnotationPair(object):
-    def __init__(self, identifier, input_text, gold_annotation, predicted_annotation, main_is_gold):
-        print(identifier)
+    def __init__(
+        self,
+        identifier,
+        input_text,
+        gold_annotation,
+        predicted_annotation,
+        main_is_gold,
+    ):
         self.identifier = identifier
         self.input_text = input_text
         self.gold_annotation = gold_annotation
@@ -285,7 +350,9 @@ class AnnotationPair(object):
         if self.is_valid:
             self.final_edus = self._get_final_edus()
             self.gold_span_map = self.gold_annotation.get_span_map(self.final_edus)
-            self.predicted_span_map = self.predicted_annotation.get_span_map(self.final_edus)
+            self.predicted_span_map = self.predicted_annotation.get_span_map(
+                self.final_edus
+            )
             self.agreement_scores = self._calculate_agreement_scores()
 
     def _get_final_edus(self):
@@ -302,44 +369,44 @@ class AnnotationPair(object):
 
     def _calculate_agreement_scores(self):
         f1_scores = {}
-        
+
         set1 = set(self.gold_span_map.keys())
         set2 = set(self.predicted_span_map.keys())
         p = len(set1.intersection(set2)) / len(set1)
         r = len(set1.intersection(set2)) / len(set2)
         f = 2 * p * r / (p + r)
-        
+
         jk = len(set1) + len(set2)
         f1_scores["S"] = f
-        
+
         matched_spans = set1.intersection(set2)
         correct_spans = {
-            "N":set(),
-            "R":set(),
-            "F":set(),
+            "N": set(),
+            "R": set(),
+            "F": set(),
         }
         for span in matched_spans:
-            
+
             rel1 = self.gold_span_map[span]
             rel2 = self.predicted_span_map[span]
             if type(rel1) == tuple or type(rel2) == tuple:
                 continue
-            
-            nuc_match = rel1['nuclearity'] == rel2['nuclearity']
-            rel_match = rel1['relation'] == rel2['relation']
-            
+
+            nuc_match = rel1["nuclearity"] == rel2["nuclearity"]
+            rel_match = rel1["relation"] == rel2["relation"]
+
             if nuc_match and rel_match:
                 correct_spans["F"].add(span)
             if nuc_match:
                 correct_spans["N"].add(span)
             if rel_match:
                 correct_spans["R"].add(span)
-           
-        for k,v in correct_spans.items():
-            f1_scores[k] = 2*len(v)/jk
-            
+
+        for k, v in correct_spans.items():
+            f1_scores[k] = 2 * len(v) / jk
+
         return f1_scores
-                
+
 
 # =========== Code for handling paired annotations ========================
 
@@ -352,11 +419,22 @@ def build_annotation_pair(files, paths, identifier):
     main_in, main_out = get_file_pair(paths[TRAIN], input_file)
     double_in, double_out = get_file_pair(paths[DOUBLE], input_file)
     assert main_in == double_in
+    boundaries = get_boundaries(main_in)
     if None in [main_out, double_out]:
         return
-    return [AnnotationPair(
-        identifier, main_in, Parse(main_out), Parse(double_out), True
-    ),AnnotationPair(
-        f'{identifier}_r', main_in, Parse(double_out), Parse(main_out), False
-    )
-           ]
+    return [
+        AnnotationPair(
+            identifier,
+            main_in,
+            Parse(main_out, boundaries),
+            Parse(double_out, boundaries),
+            main_is_gold=True
+        ),
+        AnnotationPair(
+            f"{identifier}_r",
+            main_in,
+            Parse(double_out, boundaries),
+            Parse(main_out, boundaries),
+            main_is_gold=False,
+        ),
+    ]
