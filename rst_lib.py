@@ -121,31 +121,36 @@ def build_file_map(data_path):
 
 # =========== Objects for parse representation =============================
 
+class Span(object):
+    """This contains information about the span, except which spans are its children."""
+    
+    def __init__(self, tags, node_type, subtree, is_leaf):
+        self.is_leaf = is_leaf
+        self.node_type = node_type
+        self.tags = tags
+        if not self.is_leaf:
+            self.direction = f"{subtree.left_child.span.node_type}{subtree.right_child.span.node_type}"
+            if self.direction == "NS":
+                self.relation = subtree.right_child.span.tags["rel2par"]
+            else:
+                self.relation = subtree.left_child.span.tags["rel2par"]
+
 
 class Subtree(object):
     def __init__(self, parse):
-        self.tags = get_tags(parse[1:])
-        self.node_type = parse[0][0]
+        tags = get_tags(parse[1:])
+        node_type = parse[0][0]
         children = [subtree for subtree in parse if not is_tag(subtree)]
-
         # Build a right-branching binary tree
         if children:
-            self.is_leaf = False
             self.left_child = Subtree(children[0])
             if len(children) == 2:
                 self.right_child = Subtree(children[1])
             else:
                 assert len(children) > 2
                 self.right_child = Subtree(["Nucleus"] + children[1:])
-            self.direction = f"{self.left_child.node_type}{self.right_child.node_type}"
-            if self.direction == "NS":
-                self.relation = self.right_child.tags["rel2par"]
-            else:
-                self.relation = self.left_child.tags["rel2par"]
 
-        else:
-            self.is_leaf = True
-            assert "text" in self.tags
+        self.span = Span(tags, node_type, self, is_leaf=len(children) == 0)
 
 
 class Parse(object):
@@ -157,7 +162,7 @@ class Parse(object):
             parsed = parse(maybe_converted)
             self.tree = Subtree(parsed)
             self._assign_span_indices()
-            self._assign_span_heights()
+#             self._assign_span_heights()
             self.edus = self._read_in_order()
             self.complete = True
 
@@ -165,8 +170,8 @@ class Parse(object):
         edus = []
 
         def inorder_helper(tree):
-            if "tokens" in tree.tags:
-                edus.append(tree.tags["tokens"])
+            if "tokens" in tree.span.tags:
+                edus.append(tree.span.tags["tokens"])
             else:
                 inorder_helper(tree.left_child)
                 inorder_helper(tree.right_child)
@@ -175,29 +180,31 @@ class Parse(object):
         return [None] + edus
     
     
-    def _assign_span_heights(self):
+#     def _assign_span_heights(self):
         
-        def _assign_height_helper(subtree, parent_depth):
+#         def _assign_height_helper(subtree, parent_depth):
             
-            subtree.depth_from_root = parent_depth + 1
-            if subtree.is_leaf:
-                subtree.height_from_leaf = 0
-            else:
-                _assign_height_helper(subtree.left_child, subtree.depth_from_root)
-                _assign_height_helper(subtree.right_child, subtree.depth_from_root)
-                subtree.height_from_leaf = max(subtree.left_child.height_from_leaf, subtree.right_child.height_from_leaf) + 1
-           
-        _assign_height_helper(self.tree, 0)
+#             subtree.span.depth_from_root = parent_depth + 1
+#             if subtree.span.is_leaf:
+#                 subtree.span.height_from_leaf = 0
+#             else:
+#                 _assign_height_helper(subtree.left_child, subtree.span.depth_from_root)
+#                 _assign_height_helper(subtree.right_child, subtree.span.depth_from_root)
+#                 subtree.span.height_from_leaf = max(subtree.left_child.span.height_from_leaf, subtree.right_child.span.height_from_leaf) + 1
+        
+#         self.tree.span.depth_from_root = 0
+#         _assign_height_helper(self.tree, 0)
+        
                 
 
     def _assign_span_indices(self):
         token_index = [0]  # This is a terrible solution
 
         def _assign_indices_helper(subtree):
-            if subtree.is_leaf:
+            if subtree.span.is_leaf:
                 subtree.start_token = token_index[0]
-                subtree.end_token = token_index[0] + len(subtree.tags["tokens"])
-                token_index[0] += len(subtree.tags["tokens"])
+                subtree.end_token = token_index[0] + len(subtree.span.tags["tokens"])
+                token_index[0] += len(subtree.span.tags["tokens"])
             else:
                 _assign_indices_helper(subtree.left_child)
                 subtree.start_token = subtree.left_child.start_token
@@ -210,25 +217,27 @@ class Parse(object):
         span_map = {}
 
         def get_span_helper(subtree):
-            if not subtree.is_leaf:
+            if not subtree.span.is_leaf:
                 span_map[(subtree.start_token, subtree.end_token)] = {
-                    "direction": subtree.direction,
-                    "relation": subtree.relation,
-                    "height": subtree.height_from_leaf,
-                    "depth": subtree.depth_from_root
+                    "direction": subtree.span.direction,
+                    "relation": subtree.span.relation,
+#                     "height": subtree.span.height_from_leaf,
+#                     "depth": subtree.span.depth_from_root
                 }
                 get_span_helper(subtree.left_child)
                 get_span_helper(subtree.right_child)
             else:
                 span_map[(subtree.start_token, subtree.end_token)] = (
                     "Leaf",
-                    subtree.tags["text"],
+                    subtree.span.tags["text"],
                 )
 
         get_span_helper(self.tree)
+        
         if edus is not None:
             for additional_span in set(edus) - set(span_map.keys()):
                 span_map[additional_span] = ("SegDiff", None)
+        
         return span_map
 
     def render(self, path):
@@ -236,42 +245,37 @@ class Parse(object):
 
 
 class AnnotationPair(object):
-    def __init__(self, identifier, input_text, main_annotation, double_annotation, main_is_main):
+    def __init__(self, identifier, input_text, gold_annotation, predicted_annotation, main_is_gold):
         self.identifier = identifier
         self.input_text = input_text
-        self.main_annotation = main_annotation
-        self.double_annotation = double_annotation
+        self.gold_annotation = gold_annotation
+        self.predicted_annotation = predicted_annotation
         self.is_valid = (
-            self.main_annotation.is_valid and self.double_annotation.is_valid
+            self.gold_annotation.is_valid and self.predicted_annotation.is_valid
         )
         if self.is_valid:
             self.final_edus = self._get_final_edus()
-            self.final_span_map = {
-                "main": self.main_annotation.get_span_map(self.final_edus),
-                "double": self.double_annotation.get_span_map(self.final_edus),
-            }
+            self.gold_span_map = self.gold_annotation.get_span_map(self.final_edus)
+            self.predicted_span_map = self.predicted_annotation.get_span_map(self.final_edus)
             self.agreement_scores = self._calculate_agreement_scores()
 
     def _get_final_edus(self):
         final_edu_ends = sorted(
             set(
                 end
-                for _, end in set(self.main_annotation.get_span_map().keys()).union(
-                    self.double_annotation.get_span_map().keys()
+                for _, end in set(self.gold_annotation.get_span_map().keys()).union(
+                    self.predicted_annotation.get_span_map().keys()
                 )
             )
         )
         final_edu_starts = [0] + final_edu_ends[:-1]
         return list(zip(final_edu_starts, final_edu_ends))
 
-    # {'direction': 'NS', 'relation': 'elaboration-object-attribute-e', 'height': 0, 'depth': 5}
-    # {'direction': 'NS', 'relation': 'elaboration-object-attribute-e', 'height': 0, 'depth': 5}
-
     def _calculate_agreement_scores(self):
         f1_scores = {}
         
-        set1 = set(self.final_span_map["main"].keys())
-        set2 = set(self.final_span_map["double"].keys())
+        set1 = set(self.gold_span_map.keys())
+        set2 = set(self.predicted_span_map.keys())
         p = len(set1.intersection(set2)) / len(set1)
         r = len(set1.intersection(set2)) / len(set2)
         f = 2 * p * r / (p + r)
@@ -287,8 +291,8 @@ class AnnotationPair(object):
         }
         for span in matched_spans:
             
-            rel1 = self.final_span_map['main'][span]
-            rel2 = self.final_span_map['double'][span]
+            rel1 = self.gold_span_map[span]
+            rel2 = self.predicted_span_map[span]
             if type(rel1) == tuple or type(rel2) == tuple:
                 continue
             
@@ -341,29 +345,30 @@ def get_double_annotated_train_files(data_path, valid_only=False):
         return pairs
 
 
-# =========== Wrappers for tree visualization =============================
+# # =========== Wrappers for tree visualization =============================
 
-from ete3 import NodeStyle, TextFace, Tree, TreeStyle
-import PyQt5
+# from ete3 import NodeStyle, TextFace, Tree, TreeStyle
+# import PyQt5
 
-ts = TreeStyle()
-ts.show_leaf_name = False
-ns = NodeStyle()
-ns["size"] = 0
-
-
-def get_newick_helper(subtree):
-    if "text" in subtree.tags:
-        return str(subtree.tags["leaf"])
-    else:
-        return f"({get_newick_helper(subtree.left_child)}, {get_newick_helper(subtree.right_child)})"
+# ts = TreeStyle()
+# ts.show_leaf_name = False
+# ts.orientation = 1
+# ns = NodeStyle()
+# ns["size"] = 0
 
 
-def ete_render(annotation, filename):
-    t = Tree(get_newick_helper(annotation.tree) + ";")
-    for x in t.traverse():
-        x.set_style(ns)
-        if x.name:
-            x.add_face(TextFace(f" " + " ".join(annotation.edus[int(x.name)])), 0)
-    t.convert_to_ultrametric()
-    t.render(filename, tree_style=ts, w=400, dpi=150)
+# def get_newick_helper(subtree):
+#     if "text" in subtree.tags:
+#         return str(subtree.tags["leaf"])
+#     else:
+#         return f"({get_newick_helper(subtree.left_child)}, {get_newick_helper(subtree.right_child)})"
+
+
+# def ete_render(annotation, filename):
+#     t = Tree(get_newick_helper(annotation.tree) + ";")
+#     for x in t.traverse():
+#         x.set_style(ns)
+#         if x.name:
+#             x.add_face(TextFace(f" " + " ".join(annotation.edus[int(x.name)])), 0)
+#     t.convert_to_ultrametric()
+#     t.render(filename, tree_style=ts, w=400, dpi=150)
