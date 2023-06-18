@@ -326,6 +326,9 @@ class Parse(object):
                     "nuclearity": subtree.nuclearity,
                     "relation": subtree.coarse_relation,
                     "level": subtree.level,
+                    "start_edu":subtree.start_edu,
+                    "end_edu": subtree.inc_end_edu,
+                    "orig_relation": subtree.relation,
                 }
                 get_span_helper(subtree.left_child)
                 get_span_helper(subtree.right_child)

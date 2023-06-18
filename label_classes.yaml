@@ -36,6 +36,7 @@ evidence: explanation
 example: elaboration
 explanation-argumentative: explanation
 hypothetical: condition
+Interpretation: evaluation
 interpretation: evaluation
 interpretation-n: evaluation
 interpretation-s: evaluation
@@ -47,7 +48,9 @@ Otherwise: condition
 otherwise: condition
 preference: comparison
 Problem-Solution: topic-comment
+problem-solution: topic-comment
 problem-solution-s: topic-comment
+Proportion: comparison
 purpose: enablement
 Question-Answer: topic-comment
 question-answer: topic-comment
@@ -70,6 +73,7 @@ temporal-before: temporal
 temporal-same-time: temporal
 Temporal-Same-Time: temporal
 TextualOrganization: structure
+Topic-Comment: topic-comment
 Topic-Drift: topic-change
 topic-drift: topic-change
 Topic-Shift: topic-change
