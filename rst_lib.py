@@ -1,6 +1,10 @@
 import json
 import collections
 import glob
+import yaml
+
+
+
 
 # ========== Scheme parsing =======================================================
 
@@ -50,32 +54,32 @@ def bracket_conversion(parse_text):
     return new_text
 
 
-def read_tag(parse):
-    if parse[0] == "span":
-        return {"span": tuple(int(x) for x in parse[1:])}
-    elif parse[0] == "text":
-        assert parse[1].startswith("_!") and parse[-1].endswith("_!")
-        tokens = [str(i) for i in parse[1:]]
-        tokens[0] = tokens[0][2:]
-        tokens[-1] = tokens[-1][:-2]
-        return {"text": " ".join(tokens), "tokens": tokens}
-    elif parse[0] == "leaf":
-        return {"leaf": int(parse[1])}
-    else:
-        assert parse[0] == "rel2par"
-        return {parse[0]: parse[1]}
+# def read_tag(parse):
+#     if parse[0] == "span":
+#         return {"span": tuple(int(x) for x in parse[1:])}
+#     elif parse[0] == "text":
+#         assert parse[1].startswith("_!") and parse[-1].endswith("_!")
+#         tokens = [str(i) for i in parse[1:]]
+#         tokens[0] = tokens[0][2:]
+#         tokens[-1] = tokens[-1][:-2]
+#         return {"text": " ".join(tokens), "tokens": tokens}
+#     elif parse[0] == "leaf":
+#         return {"leaf": int(parse[1])}
+#     else:
+#         assert parse[0] == "rel2par"
+#         return {parse[0]: parse[1]}
 
 
 def is_tag(parse):
     return all(type(x) in [str, float, int] for x in parse)
 
 
-def get_tags(parse):
-    tags = {}
-    for maybe_tag in parse:
-        if is_tag(maybe_tag):
-            tags.update(read_tag(maybe_tag))
-    return tags
+# def get_tags(parse):
+#     tags = {}
+#     for maybe_tag in parse:
+#         if is_tag(maybe_tag):
+#             tags.update(read_tag(maybe_tag))
+#     return tags
 
 def get_boundaries(text):
     index = 0
@@ -100,7 +104,18 @@ def get_boundaries(text):
     }
     
     
-
+with open('label_classes.yaml', 'r') as f:
+    LABEL_CLASS_MAP = yaml.safe_load(f)
+    
+def get_label_class(label):
+    if label[-4:] in ['-n-e', '-s-e']:
+        return LABEL_CLASS_MAP[label[:-4]]
+    elif label[-2:] in ['-n', '-e', 's']:
+        return LABEL_CLASS_MAP[label[:-2]]
+    else:
+        return LABEL_CLASS_MAP[label]
+        
+        
 
 # ========== RST-DT directory helpers ==================================================
 # These are functions that deal with the particulars of RST-DT's directory structure
@@ -193,7 +208,7 @@ class Subtree(object):
                 self.nuclearity = f"{self.left_child.nuclearity_contrib}{self.right_child.nuclearity_contrib}"
 
             # Assign relation
-            self.relation = self.determine_relation()
+            self.relation, self.coarse_relation = self.determine_relation()
 
     def _apply_tags(self, parse):
         for maybe_tag in parse:
@@ -213,14 +228,17 @@ class Subtree(object):
     def determine_relation(self):
         l = self.left_child.rel2par
         r = self.right_child.rel2par
+        rel = None
         assert not l == r == "span"
         if not l == "span" and not r == "span":
             assert l == r
-            return l
+            rel = l
         elif l == "span":
-            return r
+            rel = r
         else:
-            return l
+            rel = l
+            
+        return rel, get_label_class(rel)
 
 
 class Parse(object):
@@ -306,10 +324,8 @@ class Parse(object):
             if not subtree.is_leaf:
                 span_map[(subtree.start_token, subtree.end_token)] = {
                     "nuclearity": subtree.nuclearity,
-                    "relation": subtree.relation,
+                    "relation": subtree.coarse_relation,
                     "level": subtree.level,
-                    #                     "height": subtree.span.height_from_leaf,
-                    #                     "depth": subtree.span.depth_from_root
                 }
                 get_span_helper(subtree.left_child)
                 get_span_helper(subtree.right_child)
