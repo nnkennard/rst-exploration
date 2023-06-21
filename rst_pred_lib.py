@@ -89,40 +89,10 @@ class ParseFromRS3():
                 assert not has_root, f"two potential roots in {file}"
                 self.root_id, has_root = id, True
         assert has_root, f"No root in {file}."
-
-        # Loop over segments (edu) and groups (span, multinuc) to figure out
-        # the multinuc relation among each multinuc parent node's children.
-        multinuc_relname_count = collections.defaultdict(lambda: collections.defaultdict(int))
-            # multinuc_relname_count[multinuc_parent_id][relname] = count
-        multinuc_to_relname = {}
-        rows = data.getElementsByTagName("segment") + data.getElementsByTagName("group")
-        for row in rows:
-            if not row.hasAttribute("parent"):  # the root has no parent
-                continue
-
-            parent_id = row.attributes["parent"].value
-            assert parent_id in self.id_to_type, f"The rs3 parent of a node is not another node in {file}."
-            if self.id_to_type[parent_id] == "multinuc":  # parent is a multinuc
-                multinuc_relname_count[parent_id][row.attributes["relname"].value] += 1
-
-        for parent_id, relname_count in multinuc_relname_count.items():
-            n_relnames = len(relname_count)
-            assert n_relnames in [1, 2], \
-                "A multinuc parent's rs3 children should have one or two relations."
-
-            # If a multinuc parent's children have two relations,
-            # one child is a sibling satellite and others are hierarchical children.
-            for relname in multinuc_relname_count[parent_id]:
-                if multinuc_relname_count[parent_id][relname] > 1 and (
-                    f"{relname}_m" in self.disambiguated_relnames
-                ):
-                    assert parent_id not in multinuc_to_relname, \
-                        "Multiple multinuc relations are identified for a multinuc parent."
-                    multinuc_to_relname[parent_id] = relname
-                    assert parent_id in multinuc_to_relname
-
-        # Now create nodes!
+        
+        # Create nodes!
         self.nodes = {}
+        rows = data.getElementsByTagName("segment") + data.getElementsByTagName("group")
         for row in rows:
             id = row.attributes["id"].value
             type = self.id_to_type[id]  # edu/span/multinuc
@@ -134,6 +104,50 @@ class ParseFromRS3():
                 start_edu=self.edu_id_to_idx[id] if type == "edu" else None,
                 inc_end_edu=self.edu_id_to_idx[id] if type == "edu" else None,
             )
+
+        # Loop over segments (edu) and groups (span, multinuc) to figure out
+        # the multinuc relation among each multinuc parent node's children.
+        multinuc_relname_children = collections.defaultdict(
+            lambda: collections.defaultdict(list)
+        )  # multinuc_relname_children[multinuc_parent_id][relname] = count
+        for row in rows:
+            if not row.hasAttribute("parent"):  # the root has no parent
+                continue
+
+            id = row.attributes["id"].value
+            parent_id = row.attributes["parent"].value
+            assert parent_id in self.id_to_type, f"The rs3 parent of a node is not another node in {file}."
+            if self.id_to_type[parent_id] == "multinuc":  # parent is a multinuc
+                multinuc_relname_children[parent_id][row.attributes["relname"].value].append(id)
+
+        multinuc_to_children = {}
+        for parent_id, relname_children in multinuc_relname_children.items():
+            assert len(relname_children) in [1, 2], \
+                "A multinuc parent's rs3 children should have one or two relations."
+
+            if len(relname_children) == 1:
+                relname = list(relname_children.keys())[0]
+                children = relname_children[relname]
+                # If a multinuc parent's children have one relation, there are two possibilities.
+                # (1) the leftmost child is a sibling satellite and others are hierarchical children.
+                if self.nodes[parent_id].relname == "span":
+                    assert len(children) >= 3
+                    multinuc_to_children[parent_id] = children[1:]
+                # (2) all are hierarchical children
+                else:
+                    multinuc_to_children[parent_id] = children
+            else:
+                relnames = list(relname_children.keys())
+                # If a multinuc parent's children have two relations,
+                # one child is a sibling satellite and others are hierarchical children.
+                if len(relname_children[relnames[0]]) > 1:
+                    multinuc_relname = relnames[0]
+                    assert len(relname_children[relnames[1]]) == 1
+                else:
+                    multinuc_relname = relnames[1]
+                    assert len(relname_children[relnames[1]]) > 1
+                assert f"{multinuc_relname}_m" in self.disambiguated_relnames
+                multinuc_to_children[parent_id] = relname_children[multinuc_relname]
 
         # Connect each node to its hierarchical parent; add the relation to the parent
         for node_id, node in self.nodes.items():
@@ -147,7 +161,7 @@ class ParseFromRS3():
             if node.relname == "span":
                 parent.children.append(node)
             # this node has a hierarchical multinuc parent and a multinuc relation with its sibling(s)
-            elif parent.type == "multinuc" and node.relname == multinuc_to_relname[node.parent_id]:
+            elif parent.type == "multinuc" and node.id in multinuc_to_children[node.parent_id]:
                 parent.children.append(node)
                 if parent.relation is None:
                     parent.relation = node.relname
@@ -192,11 +206,7 @@ class ParseFromRS3():
             for i in range(len(node.children) - 1):
                 assert node.children[i].inc_end_edu + 1 == node.children[i + 1].start_edu
 
-            try:
-                assert node.relation is not None and node.coarse_relation is not None
-            except:
-                # import pdb; pdb.set_trace()
-                print(f"{self.identifier}, node {node.id}, node.relation is None")
+            assert node.relation is not None and node.coarse_relation is not None
 
             n_children = len(node.children)
             assert n_children >= 2
@@ -267,16 +277,16 @@ class ParseFromRS3():
 
 if __name__ == '__main__':
     PARSERS_PRED_DIR = "/work/pi_mccallum_umass_edu/wenlongzhao_umass_edu/RST/Janet-test-predictions/"
-    # PARSERS = ["bottomup", "topdown"]
-    # RUNS = ["RUN1", "RUN2", "RUN3", "RUN4", "RUN5"]
-    PARSERS = ["bottomup"]
-    RUNS = ["RUN1"]
+    PARSERS = ["bottomup", "topdown"]
+    RUNS = ["RUN1", "RUN2", "RUN3", "RUN4", "RUN5"]
+    # PARSERS = ["bottomup"]
+    # RUNS = ["RUN1"]
     LABEL_CLASS_PRED = yaml.safe_load(open('label_classes_pred.yaml', 'r'))
 
     _, files = rst_lib.build_file_map("./rst_discourse_treebank/")
     identifiers = sorted(sum(files['test'].values(), []))
 
-    label_dicts = {}
+    label_dicts = collections.defaultdict(lambda: collections.defaultdict(list))
     for parser in PARSERS:
         for run in RUNS:
             print(parser, run)
@@ -284,7 +294,6 @@ if __name__ == '__main__':
                 PARSERS_PRED_DIR,
                 f"RSTDT_{parser}/{run}/predicted_trees_rs3"
             )
-            label_dicts[(parser, run)] = []
 
             # loop over test samples to get predictions by a parser ckpt
             for identifier in identifiers:
@@ -293,6 +302,6 @@ if __name__ == '__main__':
                 data = codecs.open(file, "r", "utf-8").read()
                 data = minidom.parseString(codecs.encode(data, "utf-8"))
                 parse = ParseFromRS3(identifier, file)
-                label_dicts[(parser, run)].extend(parse.get_spans())
+                label_dicts[parser][run].extend(parse.get_spans())
     with open(f"converted_parser_predictions.json", 'w') as f:
         json.dump(label_dicts, f, indent=4)
