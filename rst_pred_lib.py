@@ -8,6 +8,8 @@ import codecs
 from xml.dom import minidom
 import rst_lib
 
+LABEL_CLASS_PRED = yaml.safe_load(open('label_classes_pred.yaml', 'r'))
+
 
 class NodeFromRS3():
     def __init__(
@@ -30,8 +32,8 @@ class NodeFromRS3():
         self.parent_id = parent_id  # rs3 parent's id
         self.relname = relname  # rs3 relation
 
-        # hierarchical representation corresponding to rs3
-        self.children = [] if children is None else children  # hierarchical children before binarization
+        # hierarchical children
+        self.children = [] if children is None else children
 
         # binary tree representation
         # relation and nuclearity at hierarchical parents
@@ -121,25 +123,35 @@ class ParseFromRS3():
                 multinuc_relname_children[parent_id][row.attributes["relname"].value].append(id)
 
         multinuc_to_children = {}
+        self.multinuc_to_reshape = set()
         for parent_id, relname_children in multinuc_relname_children.items():
             assert len(relname_children) in [1, 2], \
                 "A multinuc parent's rs3 children should have one or two relations."
 
+            # If a multinuc parent's children have one relation, there are two possibilities.
             if len(relname_children) == 1:
                 relname = list(relname_children.keys())[0]
+                # fake multinuc: just one child that has a span relation
+                if relname == "span":
+                    assert len(relname_children[relname]) == 1
+                    continue
+                assert f"{relname}_m" in self.disambiguated_relnames
                 children = relname_children[relname]
-                # If a multinuc parent's children have one relation, there are two possibilities.
-                # (1) the leftmost child is a sibling satellite and others are hierarchical children.
+
                 if self.nodes[parent_id].relname == "span":
+                    # (1) Let the leftmost child be a sibling satellite and others hierarchical children.
+                    #     We don't know which child is the leftmost and thus
+                    #     keep all children for now and do the reshaping later.
                     assert len(children) >= 3
-                    multinuc_to_children[parent_id] = children[1:]
-                # (2) all are hierarchical children
-                else:
+                    self.multinuc_to_reshape.add(parent_id)
                     multinuc_to_children[parent_id] = children
+                else:
+                    # (2) All are hierarchical children.
+                    multinuc_to_children[parent_id] = children
+            # If a multinuc parent's children have two relations,
+            # one child is a sibling satellite and others are hierarchical children.
             else:
                 relnames = list(relname_children.keys())
-                # If a multinuc parent's children have two relations,
-                # one child is a sibling satellite and others are hierarchical children.
                 if len(relname_children[relnames[0]]) > 1:
                     multinuc_relname = relnames[0]
                     assert len(relname_children[relnames[1]]) == 1
@@ -170,6 +182,7 @@ class ParseFromRS3():
                     assert parent.relation == node.relname
             else:
                 # the parent is a sibling nucleus, this node is the satellite
+                # nodes that satisfy this and the above conditions are handled as the above condition
                 assert parent.relname == "span"
                 grandparent = self.nodes[parent.parent_id]
                 grandparent.children.append(node)
@@ -183,6 +196,7 @@ class ParseFromRS3():
             f"Reached {n_processed_nodes} nodes when traversing the hierarchy from the root, " \
             f"but there should be {len(rows)} nodes."
         self._normalize_nodes(self.nodes[self.root_id])
+        self._add_nuclearity(self.nodes[self.root_id])
         self._binarization(self.nodes[self.root_id])
 
     def _assign_start_end_edus(self, node, n_processed_nodes=0):
@@ -196,18 +210,38 @@ class ParseFromRS3():
 
     def _normalize_nodes(self, node):
         """
-        For each node, order its children based on start_edu, verify that the relation is added,
-        and add nuclearity.
+        For each node, order its children based on start_edu.
+        Fix multinuc nodes with a span relation and one rs3 children relation.
         """
         if node.type != "edu":
-            node.children.sort(key=lambda node: node.start_edu)
+            node.children.sort(key=lambda child: child.start_edu)
             assert node.start_edu == node.children[0].start_edu
             assert node.inc_end_edu == node.children[-1].inc_end_edu
             for i in range(len(node.children) - 1):
                 assert node.children[i].inc_end_edu + 1 == node.children[i + 1].start_edu
 
-            assert node.relation is not None and node.coarse_relation is not None
+            # reshape if a node is a multinuc, has a span relation, and
+            # one children relation (i.e. no currently sibling satellite)
+            if node.id in self.multinuc_to_reshape:
+                assert len(node.children) > 2
+                satellite = node.children[0]
+                node.children = node.children[1:]
+                node.start_edu = node.children[0].start_edu
 
+                parent = self.nodes[node.parent_id]
+                assert len(parent.children) == 1 and parent.children[0] == node
+                parent.children = [satellite, node]
+                assert parent.relation is None
+                parent.relation = node.relation
+                parent.coarse_relation = node.coarse_relation
+
+                self._normalize_nodes(satellite)
+
+            for child in node.children:
+                self._normalize_nodes(child)
+
+    def _add_nuclearity(self, node):
+        if node.type != "edu":
             n_children = len(node.children)
             assert n_children >= 2
             if len(node.children) == 2:
@@ -222,11 +256,16 @@ class ParseFromRS3():
                 node.nuclearity = "N" * n_children
 
             for child in node.children:
-                self._normalize_nodes(child)
+                self._add_nuclearity(child)
 
     def _binarization(self, node):
-        """Binarize the tree. For each node, specify its left_child and right_child."""
+        """
+        Binarize the tree.
+        For each node, specify its left_child and right_child; verify that the relation is added.
+        """
         if node.type != "edu":
+            assert node.relation is not None and node.coarse_relation is not None
+
             node.left_child = node.children[0]
             if len(node.children) == 2:
                 node.right_child = node.children[1]
@@ -279,9 +318,6 @@ if __name__ == '__main__':
     PARSERS_PRED_DIR = "/work/pi_mccallum_umass_edu/wenlongzhao_umass_edu/RST/Janet-test-predictions/"
     PARSERS = ["bottomup", "topdown"]
     RUNS = ["RUN1", "RUN2", "RUN3", "RUN4", "RUN5"]
-    # PARSERS = ["bottomup"]
-    # RUNS = ["RUN1"]
-    LABEL_CLASS_PRED = yaml.safe_load(open('label_classes_pred.yaml', 'r'))
 
     _, files = rst_lib.build_file_map("./rst_discourse_treebank/")
     identifiers = sorted(sum(files['test'].values(), []))
@@ -291,8 +327,7 @@ if __name__ == '__main__':
         for run in RUNS:
             print(parser, run)
             experiment_dir = os.path.join(
-                PARSERS_PRED_DIR,
-                f"RSTDT_{parser}/{run}/predicted_trees_rs3"
+                PARSERS_PRED_DIR, f"RSTDT_{parser}/{run}/predicted_trees_rs3"
             )
 
             # loop over test samples to get predictions by a parser ckpt
@@ -303,5 +338,6 @@ if __name__ == '__main__':
                 data = minidom.parseString(codecs.encode(data, "utf-8"))
                 parse = ParseFromRS3(identifier, file)
                 label_dicts[parser][run].extend(parse.get_spans())
-    with open(f"converted_parser_predictions.json", 'w') as f:
+    os.makedirs("data", exist_ok=True)
+    with open(f"data/converted_parser_predictions.json", 'w') as f:
         json.dump(label_dicts, f, indent=4)
